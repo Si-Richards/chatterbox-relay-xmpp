@@ -41,6 +41,7 @@ interface XMPPState {
   createRoom: (roomName: string) => void;
   joinRoom: (roomJid: string) => void;
   setActiveChat: (jid: string, type: 'chat' | 'groupchat') => void;
+  handleStanza: (stanza: any) => void; // Added the handleStanza method
 }
 
 export const useXMPPStore = create<XMPPState>((set, get) => ({
@@ -52,6 +53,54 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   messages: {},
   activeChat: null,
   activeChatType: null,
+
+  // Handle XMPP stanzas (messages, presence, etc.)
+  handleStanza: (stanza: any) => {
+    // Handle messages
+    if (stanza.is('message')) {
+      const from = stanza.attrs.from;
+      const to = stanza.attrs.to;
+      const type = stanza.attrs.type || 'chat';
+      const body = stanza.getChildText('body');
+      
+      if (body) {
+        const message: Message = {
+          id: Date.now().toString(),
+          from,
+          to,
+          body,
+          timestamp: new Date(),
+          type: type as 'chat' | 'groupchat'
+        };
+        
+        const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+        
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [chatJid]: [...(state.messages[chatJid] || []), message]
+          }
+        }));
+      }
+    }
+    
+    // Handle presence
+    if (stanza.is('presence')) {
+      const from = stanza.attrs.from;
+      const type = stanza.attrs.type;
+      const show = stanza.getChildText('show') || 'online';
+      
+      if (!type || type === 'available') {
+        set((state) => ({
+          contacts: state.contacts.map(contact => 
+            contact.jid === from.split('/')[0] 
+              ? { ...contact, presence: show as any }
+              : contact
+          )
+        }));
+      }
+    }
+  },
 
   connect: async (username: string, password: string) => {
     try {
@@ -86,51 +135,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         const { handleStanza } = get();
         if (handleStanza) {
           handleStanza(stanza);
-        } else {
-          // Handle messages
-          if (stanza.is('message')) {
-            const from = stanza.attrs.from;
-            const to = stanza.attrs.to;
-            const type = stanza.attrs.type || 'chat';
-            const body = stanza.getChildText('body');
-            
-            if (body) {
-              const message: Message = {
-                id: Date.now().toString(),
-                from,
-                to,
-                body,
-                timestamp: new Date(),
-                type: type as 'chat' | 'groupchat'
-              };
-              
-              const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-              
-              set((state) => ({
-                messages: {
-                  ...state.messages,
-                  [chatJid]: [...(state.messages[chatJid] || []), message]
-                }
-              }));
-            }
-          }
-          
-          // Handle presence
-          if (stanza.is('presence')) {
-            const from = stanza.attrs.from;
-            const type = stanza.attrs.type;
-            const show = stanza.getChildText('show') || 'online';
-            
-            if (!type || type === 'available') {
-              set((state) => ({
-                contacts: state.contacts.map(contact => 
-                  contact.jid === from.split('/')[0] 
-                    ? { ...contact, presence: show as any }
-                    : contact
-                )
-              }));
-            }
-          }
         }
       });
 
