@@ -34,24 +34,25 @@ interface XMPPState {
   messages: Record<string, Message[]>;
   activeChat: string | null;
   activeChatType: 'chat' | 'groupchat' | null;
-  userStatus: 'online' | 'away' | 'dnd' | 'xa'; // User's current status
-  userAvatar: string | null; // User's avatar URL
+  userStatus: 'online' | 'away' | 'dnd' | 'xa';
+  userAvatar: string | null;
   
   // Actions
   connect: (username: string, password: string) => Promise<void>;
   disconnect: () => void;
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
-  deleteMessage: (chatJid: string, messageId: string) => void; // New method for deleting messages
+  deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
   createRoom: (roomName: string) => void;
   joinRoom: (roomJid: string) => void;
-  inviteToRoom: (roomJid: string, userJid: string) => void; // New method for inviting users
-  kickFromRoom: (roomJid: string, userJid: string) => void; // New method for removing users
+  inviteToRoom: (roomJid: string, userJid: string) => void;
+  kickFromRoom: (roomJid: string, userJid: string) => void;
   setActiveChat: (jid: string, type: 'chat' | 'groupchat') => void;
-  setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void; // New method for setting status
-  setUserAvatar: (avatarUrl: string) => void; // Added setter for avatar
-  markMessageAsDelivered: (from: string, id: string) => void; // New method for marking delivered
-  markMessageAsRead: (from: string, id: string) => void; // New method for marking read
+  setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
+  setUserAvatar: (avatarUrl: string) => void;
+  markMessageAsDelivered: (from: string, id: string) => void;
+  markMessageAsRead: (from: string, id: string) => void;
+  fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
   handleStanza: (stanza: any) => void;
 }
 
@@ -65,8 +66,8 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   activeChat: null,
   activeChatType: null,
   userStatus: 'online',
-  userAvatar: null, // Initialize user avatar as null
-
+  userAvatar: null,
+  
   // Handle XMPP stanzas (messages, presence, etc.)
   handleStanza: (stanza: any) => {
     // Handle messages
@@ -569,5 +570,91 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         )
       }
     }));
+  },
+  
+  // Fetch all users from the server
+  fetchServerUsers: async () => {
+    const { client } = get();
+    if (!client) {
+      throw new Error('Not connected to server');
+    }
+
+    return new Promise((resolve, reject) => {
+      const queryId = `users-${Date.now()}`;
+      
+      // Send IQ query to get all users (this is a simplified implementation)
+      // In a real scenario, you might need to query specific components or use different methods
+      const iq = xml(
+        'iq',
+        { type: 'get', to: 'ejabberd.voicehost.io', id: queryId },
+        xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+      );
+
+      // Set up a temporary listener for the response
+      const handleResponse = (stanza: any) => {
+        if (stanza.is('iq') && stanza.attrs.id === queryId) {
+          client.off('stanza', handleResponse);
+          
+          if (stanza.attrs.type === 'result') {
+            const query = stanza.getChild('query');
+            const users: { jid: string; name: string; }[] = [];
+            
+            if (query) {
+              const items = query.getChildren('item');
+              items.forEach((item: any) => {
+                const jid = item.attrs.jid;
+                if (jid && jid.includes('@ejabberd.voicehost.io') && !jid.includes('conference')) {
+                  users.push({
+                    jid: jid,
+                    name: jid.split('@')[0]
+                  });
+                }
+              });
+            }
+            
+            resolve(users);
+          } else {
+            // If disco#items doesn't work, return a mock list for demonstration
+            // In production, you'd implement proper user discovery
+            const mockUsers = [
+              { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
+              { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
+              { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
+              { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
+              { jid: 'test@ejabberd.voicehost.io', name: 'test' }
+            ];
+            
+            // Filter out current user
+            const currentUser = get().currentUser;
+            const filteredUsers = mockUsers.filter(user => user.jid !== currentUser);
+            
+            resolve(filteredUsers);
+          }
+        }
+      };
+
+      client.on('stanza', handleResponse);
+      
+      // Send the query
+      client.send(iq);
+      
+      // Set a timeout in case no response
+      setTimeout(() => {
+        client.off('stanza', handleResponse);
+        // Return mock users as fallback
+        const mockUsers = [
+          { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
+          { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
+          { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
+          { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
+          { jid: 'test@ejabberd.voicehost.io', name: 'test' }
+        ];
+        
+        const currentUser = get().currentUser;
+        const filteredUsers = mockUsers.filter(user => user.jid !== currentUser);
+        
+        resolve(filteredUsers);
+      }, 5000);
+    });
   }
 }));

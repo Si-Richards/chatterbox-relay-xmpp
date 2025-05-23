@@ -35,6 +35,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { toast } from '@/hooks/use-toast';
+import { UserBrowser } from './UserBrowser';
 
 export const Sidebar = () => {
   const { 
@@ -57,6 +58,7 @@ export const Sidebar = () => {
   const [roomJidToJoin, setRoomJidToJoin] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = React.useState(false)
+  const [isUserBrowserOpen, setIsUserBrowserOpen] = useState(false);
 
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -206,6 +208,12 @@ export const Sidebar = () => {
                   </CommandItem>
                   <CommandItem onSelect={() => {
                       setOpen(false)
+                      setIsUserBrowserOpen(true)
+                    }}>
+                    Browse Users
+                  </CommandItem>
+                  <CommandItem onSelect={() => {
+                      setOpen(false)
                       setIsCreateRoomOpen(true)
                     }}>
                     Create Room
@@ -243,6 +251,22 @@ export const Sidebar = () => {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setIsAddContactOpen(false)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleAddContact}>Add Contact</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* User Browser Dialog */}
+      <AlertDialog open={isUserBrowserOpen} onOpenChange={setIsUserBrowserOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Browse Server Users</AlertDialogTitle>
+            <AlertDialogDescription>
+              Find and add users from the XMPP server to your contacts.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <UserBrowser />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsUserBrowserOpen(false)}>Close</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
