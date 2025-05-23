@@ -3,7 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Send, Hash, User, MessageSquare } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Trash2, Check } from 'lucide-react';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { useXMPPStore } from '@/store/xmppStore';
 
 export const ChatArea = () => {
@@ -17,7 +23,8 @@ export const ChatArea = () => {
     currentUser,
     contacts,
     rooms,
-    sendMessage 
+    sendMessage,
+    deleteMessage
   } = useXMPPStore();
 
   const currentMessages = activeChat ? messages[activeChat] || [] : [];
@@ -42,6 +49,11 @@ export const ChatArea = () => {
     setMessageText('');
   };
 
+  const handleDeleteMessage = (messageId: string) => {
+    if (!activeChat) return;
+    deleteMessage(activeChat, messageId);
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -63,6 +75,22 @@ export const ChatArea = () => {
       return fromJid.includes(currentUser.split('@')[0]);
     }
     return fromJid === currentUser;
+  };
+
+  const getMessageStatusIcon = (status?: string) => {
+    if (!status || status === 'sent') {
+      return null;
+    } else if (status === 'delivered') {
+      return <Check className="h-3 w-3 inline ml-1 text-gray-400" />;
+    } else if (status === 'read') {
+      return (
+        <div className="inline-flex ml-1">
+          <Check className="h-3 w-3 text-blue-400" />
+          <Check className="h-3 w-3 -ml-1 text-blue-400" />
+        </div>
+      );
+    }
+    return null;
   };
 
   if (!activeChat) {
@@ -110,31 +138,50 @@ export const ChatArea = () => {
             ? message.from.split('/')[1] || message.from.split('@')[0]
             : message.from.split('@')[0];
 
+          const messageContent = (
+            <div
+              className={`px-4 py-2 rounded-lg ${
+                isOwn
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white border border-gray-200'
+              }`}
+            >
+              {!isOwn && activeChatType === 'groupchat' && (
+                <p className="text-xs font-medium mb-1 text-blue-600">
+                  {senderName}
+                </p>
+              )}
+              <p className="text-sm break-words">{message.body}</p>
+              <div className={`text-xs mt-1 flex items-center ${
+                isOwn ? 'text-blue-100' : 'text-gray-500'
+              }`}>
+                <span>{formatTime(message.timestamp)}</span>
+                {isOwn && getMessageStatusIcon(message.status)}
+              </div>
+            </div>
+          );
+
           return (
             <div
               key={message.id}
               className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
             >
               <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
-                <div
-                  className={`px-4 py-2 rounded-lg ${
-                    isOwn
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-white border border-gray-200'
-                  }`}
-                >
-                  {!isOwn && activeChatType === 'groupchat' && (
-                    <p className="text-xs font-medium mb-1 text-blue-600">
-                      {senderName}
-                    </p>
-                  )}
-                  <p className="text-sm break-words">{message.body}</p>
-                  <p className={`text-xs mt-1 ${
-                    isOwn ? 'text-blue-100' : 'text-gray-500'
-                  }`}>
-                    {formatTime(message.timestamp)}
-                  </p>
-                </div>
+                {isOwn ? (
+                  <ContextMenu>
+                    <ContextMenuTrigger>
+                      {messageContent}
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={() => handleDeleteMessage(message.id)}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Message
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                ) : (
+                  messageContent
+                )}
               </div>
             </div>
           );
