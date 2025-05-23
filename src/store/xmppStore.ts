@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { client, xml } from '@xmpp/client';
 
@@ -16,6 +15,7 @@ interface Contact {
   jid: string;
   name: string;
   presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa'; // Added more status options
+  avatar?: string; // Added avatar URL field
 }
 
 interface Room {
@@ -35,6 +35,7 @@ interface XMPPState {
   activeChat: string | null;
   activeChatType: 'chat' | 'groupchat' | null;
   userStatus: 'online' | 'away' | 'dnd' | 'xa'; // User's current status
+  userAvatar: string | null; // User's avatar URL
   
   // Actions
   connect: (username: string, password: string) => Promise<void>;
@@ -48,6 +49,7 @@ interface XMPPState {
   kickFromRoom: (roomJid: string, userJid: string) => void; // New method for removing users
   setActiveChat: (jid: string, type: 'chat' | 'groupchat') => void;
   setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void; // New method for setting status
+  setUserAvatar: (avatarUrl: string) => void; // Added setter for avatar
   markMessageAsDelivered: (from: string, id: string) => void; // New method for marking delivered
   markMessageAsRead: (from: string, id: string) => void; // New method for marking read
   handleStanza: (stanza: any) => void;
@@ -63,6 +65,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   activeChat: null,
   activeChatType: null,
   userStatus: 'online',
+  userAvatar: null, // Initialize user avatar as null
 
   // Handle XMPP stanzas (messages, presence, etc.)
   handleStanza: (stanza: any) => {
@@ -206,7 +209,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   connect: async (username: string, password: string) => {
     try {
       const xmppClient = client({
-        service: 'wss://ejabberd.voicehost.io:5443/websocket',
+        service: 'wss://ejabberd.voicehost.io:443/websocket', // Updated port to 443
         domain: 'ejabberd.voicehost.io',
         username: username,
         password: password,
@@ -342,7 +345,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
 
     // Add to contacts list
     set((state) => ({
-      contacts: [...state.contacts, { jid, name: jid.split('@')[0], presence: 'offline' }]
+      contacts: [...state.contacts, { jid, name: jid.split('@')[0], presence: 'offline', avatar: null }]
     }));
   },
 
@@ -502,6 +505,30 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     client.send(presenceStanza);
     
     set({ userStatus: status });
+  },
+  
+  // Set user avatar
+  setUserAvatar: (avatarUrl: string) => {
+    const { client } = get();
+    if (!client) return;
+    
+    // Update vCard with avatar (XEP-0153)
+    // This is a simplified implementation - ideally, you'd convert the image to base64
+    // and update the actual vCard XML, but for this example we'll just store the URL
+    
+    // Store avatar URL in local state
+    set({ userAvatar: avatarUrl });
+    
+    // Publish avatar update in presence
+    const presence = xml(
+      'presence',
+      {},
+      xml('x', { xmlns: 'vcard-temp:x:update' },
+        xml('photo', {}, avatarUrl)
+      )
+    );
+    
+    client.send(presence);
   },
   
   // Mark message as delivered

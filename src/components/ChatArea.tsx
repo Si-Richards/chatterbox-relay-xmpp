@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Send, Hash, User, MessageSquare, Trash2, Check } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,7 +24,8 @@ export const ChatArea = () => {
     contacts,
     rooms,
     sendMessage,
-    deleteMessage
+    deleteMessage,
+    userAvatar
   } = useXMPPStore();
 
   const currentMessages = activeChat ? messages[activeChat] || [] : [];
@@ -93,6 +94,11 @@ export const ChatArea = () => {
     return null;
   };
 
+  const getContactAvatar = (jid: string) => {
+    const contact = contacts.find(c => c.jid === jid);
+    return contact?.avatar;
+  };
+
   if (!activeChat) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -118,7 +124,12 @@ export const ChatArea = () => {
             {activeChatType === 'groupchat' ? (
               <Hash className="w-5 h-5 text-green-600" />
             ) : (
-              <User className="w-5 h-5 text-blue-600" />
+              <Avatar>
+                <AvatarImage src={getContactAvatar(activeChat)} />
+                <AvatarFallback>
+                  <User className="w-5 h-5 text-blue-600" />
+                </AvatarFallback>
+              </Avatar>
             )}
           </div>
           <div>
@@ -166,6 +177,16 @@ export const ChatArea = () => {
               key={message.id}
               className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
             >
+              {!isOwn && (
+                <div className="mr-2 flex-shrink-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+              )}
               <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
                 {isOwn ? (
                   <ContextMenu>
@@ -183,6 +204,16 @@ export const ChatArea = () => {
                   messageContent
                 )}
               </div>
+              {isOwn && (
+                <div className="ml-2 flex-shrink-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={userAvatar || undefined} />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+              )}
             </div>
           );
         })}
