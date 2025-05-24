@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
-import { LogOut, Plus, Search, Hash, User } from 'lucide-react';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +37,7 @@ import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { toast } from '@/hooks/use-toast';
 import { UserBrowser } from './UserBrowser';
+import { CreateRoomDialog } from './CreateRoomDialog';
 
 export const Sidebar = () => {
   const { 
@@ -45,17 +47,17 @@ export const Sidebar = () => {
     disconnect, 
     addContact, 
     createRoom, 
+    deleteRoom,
     joinRoom,
     setActiveChat, 
     userStatus, 
     setUserStatus 
   } = useXMPPStore();
   const [newContactJid, setNewContactJid] = useState('');
-  const [roomName, setRoomName] = useState('');
+  const [roomJidToJoin, setRoomJidToJoin] = useState('');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isJoinRoomOpen, setIsJoinRoomOpen] = useState(false);
-  const [roomJidToJoin, setRoomJidToJoin] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = React.useState(false)
   const [isUserBrowserOpen, setIsUserBrowserOpen] = useState(false);
@@ -67,6 +69,16 @@ export const Sidebar = () => {
   const filteredRooms = rooms.filter(room =>
     room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const getPresenceColor = (presence: string) => {
+    switch (presence) {
+      case 'online': return 'bg-green-500';
+      case 'away': return 'bg-yellow-500';
+      case 'dnd': return 'bg-red-500';
+      case 'xa': return 'bg-gray-500';
+      default: return 'bg-gray-300';
+    }
+  };
 
   const handleAddContact = () => {
     if (!newContactJid.trim()) {
@@ -82,20 +94,6 @@ export const Sidebar = () => {
     setIsAddContactOpen(false);
   };
 
-  const handleCreateRoom = () => {
-    if (!roomName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a room name",
-        variant: "destructive"
-      });
-      return;
-    }
-    createRoom(roomName.trim());
-    setRoomName('');
-    setIsCreateRoomOpen(false);
-  };
-
   const handleJoinRoom = () => {
     if (!roomJidToJoin.trim()) {
       toast({
@@ -108,6 +106,14 @@ export const Sidebar = () => {
     joinRoom(roomJidToJoin.trim());
     setRoomJidToJoin('');
     setIsJoinRoomOpen(false);
+  };
+
+  const handleDeleteRoom = (roomJid: string, roomName: string) => {
+    toast({
+      title: "Room Deleted",
+      description: `Deleted room: ${roomName}`
+    });
+    deleteRoom(roomJid);
   };
 
   return (
@@ -161,8 +167,14 @@ export const Sidebar = () => {
                 onClick={() => setActiveChat(contact.jid, 'chat')}
               >
                 <CardContent className="p-3 flex items-center space-x-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <p className="text-sm font-medium">{contact.name}</p>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{contact.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -178,8 +190,27 @@ export const Sidebar = () => {
                 onClick={() => setActiveChat(room.jid, 'groupchat')}
               >
                 <CardContent className="p-3 flex items-center space-x-2">
-                  <Hash className="w-4 h-4 text-gray-500" />
-                  <p className="text-sm font-medium">{room.name}</p>
+                  <div className="flex items-center space-x-1">
+                    <Hash className="w-4 h-4 text-gray-500" />
+                    {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{room.name}</p>
+                    <p className="text-xs text-gray-500">{room.participants.length} participants</p>
+                  </div>
+                  {room.isOwner && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteRoom(room.jid, room.name);
+                      }}
+                      className="h-6 w-6 p-0 hover:bg-red-100"
+                    >
+                      <Trash2 className="h-3 w-3 text-red-500" />
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -272,28 +303,10 @@ export const Sidebar = () => {
       </AlertDialog>
 
       {/* Create Room Dialog */}
-      <AlertDialog open={isCreateRoomOpen} onOpenChange={setIsCreateRoomOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Create New Room</AlertDialogTitle>
-            <AlertDialogDescription>
-              Enter the name of the room you want to create.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="roomName">Room Name</Label>
-            <Input
-              id="roomName"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setIsCreateRoomOpen(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCreateRoom}>Create Room</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CreateRoomDialog 
+        open={isCreateRoomOpen} 
+        onOpenChange={setIsCreateRoomOpen}
+      />
 
       {/* Join Room Dialog */}
       <AlertDialog open={isJoinRoomOpen} onOpenChange={setIsJoinRoomOpen}>

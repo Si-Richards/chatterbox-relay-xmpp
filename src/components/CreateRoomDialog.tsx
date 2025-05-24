@@ -10,8 +10,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
+import { Infinity } from 'lucide-react';
 
 interface CreateRoomDialogProps {
   open: boolean;
@@ -23,6 +25,7 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
   onOpenChange,
 }) => {
   const [roomName, setRoomName] = useState('');
+  const [isPermanent, setIsPermanent] = useState(false);
   const { createRoom } = useXMPPStore();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,13 +41,14 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
     }
 
     const cleanRoomName = roomName.trim().toLowerCase().replace(/\s+/g, '-');
-    createRoom(cleanRoomName);
+    createRoom(cleanRoomName, isPermanent);
     setRoomName('');
+    setIsPermanent(false);
     onOpenChange(false);
     
     toast({
       title: "Room Created",
-      description: `Created and joined room: ${cleanRoomName}`
+      description: `Created ${isPermanent ? 'permanent' : 'temporary'} room: ${cleanRoomName}`
     });
   };
 
@@ -54,7 +58,7 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Create Group Chat</DialogTitle>
           <DialogDescription>
-            Enter a name for your new group chat room.
+            Enter a name for your new group chat room and choose if it should be permanent.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -66,6 +70,23 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
             />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="permanent"
+              checked={isPermanent}
+              onCheckedChange={(checked) => setIsPermanent(checked as boolean)}
+            />
+            <Label htmlFor="permanent" className="flex items-center space-x-1">
+              <Infinity className="w-4 h-4 text-blue-500" />
+              <span>Make room permanent</span>
+            </Label>
+          </div>
+          <div className="text-xs text-gray-500">
+            {isPermanent 
+              ? "Permanent rooms persist even when empty and can be discovered by other users."
+              : "Temporary rooms are automatically destroyed when the last participant leaves."
+            }
           </div>
           <div className="flex justify-end space-x-2">
             <Button 

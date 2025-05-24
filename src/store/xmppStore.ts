@@ -23,6 +23,7 @@ interface Room {
   name: string;
   participants: string[];
   isOwner?: boolean;
+  isPermanent?: boolean;
 }
 
 interface XMPPState {
@@ -43,7 +44,8 @@ interface XMPPState {
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
-  createRoom: (roomName: string) => void;
+  createRoom: (roomName: string, isPermanent?: boolean) => void;
+  deleteRoom: (roomJid: string) => void;
   joinRoom: (roomJid: string) => void;
   inviteToRoom: (roomJid: string, userJid: string) => void;
   kickFromRoom: (roomJid: string, userJid: string) => void;
@@ -104,7 +106,8 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
           jid: item.attrs.jid,
           name: item.attrs.name || item.attrs.jid.split('@')[0],
           participants: [],
-          isOwner: false
+          isOwner: false,
+          isPermanent: true // Assume existing rooms are permanent
         }));
         
         set({ rooms });
@@ -238,10 +241,19 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       const show = stanza.getChildText('show') || 'online';
       
       if (!type || type === 'available') {
+        const presenceStatus = show === 'online' ? 'online' : show;
         set((state) => ({
           contacts: state.contacts.map(contact => 
             contact.jid === from.split('/')[0] 
-              ? { ...contact, presence: show as any }
+              ? { ...contact, presence: presenceStatus as any }
+              : contact
+          )
+        }));
+      } else if (type === 'unavailable') {
+        set((state) => ({
+          contacts: state.contacts.map(contact => 
+            contact.jid === from.split('/')[0] 
+              ? { ...contact, presence: 'offline' }
               : contact
           )
         }));
@@ -408,10 +420,84 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     }));
   },
 
-  createRoom: (roomName: string) => {
+  createRoom: (roomName: string, isPermanent: boolean = false) => {
+    const { client, currentUser } = get();
+    if (!client) return;
+
     const roomJid = `${roomName}@conference.ejabberd.voicehost.io`;
-    const { joinRoom } = get();
-    joinRoom(roomJid);
+    const nickname = currentUser.split('@')[0];
+    
+    // Join the room first
+    const presence = xml('presence', { to: `${roomJid}/${nickname}` });
+    client.send(presence);
+
+    // If it's a permanent room, configure it
+    if (isPermanent) {
+      setTimeout(() => {
+        const configForm = xml(
+          'iq',
+          { type: 'set', to: roomJid, id: `config-${Date.now()}` },
+          xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' },
+            xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+              xml('field', { var: 'FORM_TYPE' },
+                xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
+              ),
+              xml('field', { var: 'muc#roomconfig_persistentroom' },
+                xml('value', {}, '1')
+              ),
+              xml('field', { var: 'muc#roomconfig_publicroom' },
+                xml('value', {}, '1')
+              )
+            )
+          )
+        );
+        client.send(configForm);
+      }, 1000);
+    }
+
+    set((state) => ({
+      rooms: [...state.rooms, { 
+        jid: roomJid, 
+        name: roomName, 
+        participants: [],
+        isOwner: true,
+        isPermanent
+      }]
+    }));
+  },
+
+  deleteRoom: (roomJid: string) => {
+    const { client, rooms } = get();
+    if (!client) return;
+
+    const room = rooms.find(r => r.jid === roomJid);
+    if (!room || !room.isOwner) {
+      console.log('Only room owners can delete rooms');
+      return;
+    }
+
+    // Send destroy room command
+    const destroyIq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `destroy-${Date.now()}` },
+      xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' },
+        xml('destroy', { jid: roomJid },
+          xml('reason', {}, 'Room deleted by owner')
+        )
+      )
+    );
+    
+    client.send(destroyIq);
+
+    // Remove room from local state
+    set((state) => ({
+      rooms: state.rooms.filter(r => r.jid !== roomJid),
+      messages: Object.fromEntries(
+        Object.entries(state.messages).filter(([key]) => key !== roomJid)
+      ),
+      activeChat: state.activeChat === roomJid ? null : state.activeChat,
+      activeChatType: state.activeChat === roomJid ? null : state.activeChatType
+    }));
   },
 
   joinRoom: (roomJid: string) => {
