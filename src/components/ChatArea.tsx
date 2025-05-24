@@ -7,6 +7,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { useXMPPStore } from '@/store/xmppStore';
 
+// Simple markdown parser for basic formatting
+const parseMarkdown = (text: string) => {
+  // Bold: **text** or __text__
+  let parsed = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  parsed = parsed.replace(/__(.*?)__/g, '<strong>$1</strong>');
+  
+  // Italic: *text* or _text_
+  parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  parsed = parsed.replace(/_(.*?)_/g, '<em>$1</em>');
+  
+  return parsed;
+};
+
 export const ChatArea = () => {
   const [messageText, setMessageText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -78,12 +91,12 @@ export const ChatArea = () => {
     if (!status || status === 'sent') {
       return null;
     } else if (status === 'delivered') {
-      return <Check className="h-3 w-3 inline ml-1 text-gray-400" />;
+      return <Check className="h-3 w-3 inline ml-1 text-white" />;
     } else if (status === 'read') {
       return (
         <div className="inline-flex ml-1">
-          <Check className="h-3 w-3 text-blue-400" />
-          <Check className="h-3 w-3 -ml-1 text-blue-400" />
+          <Check className="h-3 w-3 text-white" />
+          <Check className="h-3 w-3 -ml-1 text-white" />
         </div>
       );
     }
@@ -212,10 +225,18 @@ export const ChatArea = () => {
                         </div>
                       </div>
                     )}
-                    {message.body && <p className="text-sm break-words">{message.body}</p>}
+                    {message.body && (
+                      <div 
+                        className="text-sm break-words"
+                        dangerouslySetInnerHTML={{ __html: parseMarkdown(message.body) }}
+                      />
+                    )}
                   </div>
                 ) : (
-                  <p className="text-sm break-words">{message.body}</p>
+                  <div 
+                    className="text-sm break-words"
+                    dangerouslySetInnerHTML={{ __html: parseMarkdown(message.body) }}
+                  />
                 )}
                 
                 <div className={`text-xs mt-1 flex items-center ${
@@ -287,7 +308,7 @@ export const ChatArea = () => {
           <Input
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder={`Message ${getChatName()}...`}
+            placeholder={`Message ${getChatName()}... (Use **bold** or *italic*)`}
             className="flex-1"
           />
           <Button 

@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
-import { LogOut, Plus, Search, Hash, User, Infinity, Trash2 } from 'lucide-react';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +62,8 @@ export const Sidebar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = React.useState(false)
   const [isUserBrowserOpen, setIsUserBrowserOpen] = useState(false);
+  const [contactsCollapsed, setContactsCollapsed] = useState(false);
+  const [roomsCollapsed, setRoomsCollapsed] = useState(false);
 
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -116,6 +119,13 @@ export const Sidebar = () => {
     deleteRoom(roomJid);
   };
 
+  const handleInviteToRoom = (roomJid: string, roomName: string) => {
+    toast({
+      title: "Invite Users",
+      description: `Feature coming soon for room: ${roomName}`
+    });
+  };
+
   return (
     <div className="w-80 flex-shrink-0 border-r bg-gray-50 border-gray-200 flex flex-col">
       {/* User Info Section */}
@@ -158,82 +168,109 @@ export const Sidebar = () => {
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
           {/* Contacts */}
-          <div>
-            <div className="text-xs font-medium text-gray-500 px-2">Contacts</div>
-            {filteredContacts.map((contact) => (
-              <Card
-                key={contact.jid}
-                className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md"
-                onClick={() => setActiveChat(contact.jid, 'chat')}
-              >
-                <CardContent className="p-3 flex items-center space-x-2">
-                  <div className="relative">
-                    <User className="w-4 h-4 text-gray-500" />
-                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{contact.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Collapsible open={!contactsCollapsed} onOpenChange={(open) => setContactsCollapsed(!open)}>
+            <CollapsibleTrigger className="flex items-center w-full text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
+              {contactsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+              Contacts ({filteredContacts.length})
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="space-y-1 mt-1">
+                {filteredContacts.map((contact) => (
+                  <Card
+                    key={contact.jid}
+                    className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer"
+                    onClick={() => setActiveChat(contact.jid, 'chat')}
+                  >
+                    <CardContent className="p-3 flex items-center space-x-2">
+                      <div className="relative">
+                        <User className="w-4 h-4 text-gray-500" />
+                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{contact.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Rooms */}
-          <div>
-            <div className="text-xs font-medium text-gray-500 px-2">Rooms</div>
-            {filteredRooms.map((room) => (
-              <Card
-                key={room.jid}
-                className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md"
-                onClick={() => setActiveChat(room.jid, 'groupchat')}
-              >
-                <CardContent className="p-3 flex items-center space-x-2">
-                  <div className="flex items-center space-x-1">
-                    <Hash className="w-4 h-4 text-gray-500" />
-                    {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{room.name}</p>
-                    <p className="text-xs text-gray-500">{room.participants.length} participants</p>
-                  </div>
-                  {room.isOwner && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+          <Collapsible open={!roomsCollapsed} onOpenChange={(open) => setRoomsCollapsed(!open)}>
+            <CollapsibleTrigger className="flex items-center w-full text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
+              {roomsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+              Rooms ({filteredRooms.length})
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="space-y-1 mt-1">
+                {filteredRooms.map((room) => (
+                  <Card
+                    key={room.jid}
+                    className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer"
+                    onClick={() => setActiveChat(room.jid, 'groupchat')}
+                  >
+                    <CardContent className="p-3 flex items-center space-x-2">
+                      <div className="flex items-center space-x-1">
+                        <Hash className="w-4 h-4 text-gray-500" />
+                        {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{room.name}</p>
+                        <p className="text-xs text-gray-500">{room.participants.length} participants</p>
+                      </div>
+                      <div className="flex items-center space-x-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-6 w-6 p-0 hover:bg-red-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInviteToRoom(room.jid, room.name);
+                          }}
+                          className="h-6 w-6 p-0 hover:bg-blue-100"
                         >
-                          <Trash2 className="h-3 w-3 text-red-500" />
+                          <UserPlus className="h-3 w-3 text-blue-500" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Room</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete "{room.name}"? This action cannot be undone.
-                            {room.isPermanent && " This is a permanent room and will be completely removed from the server."}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction 
-                            onClick={() => handleDeleteRoom(room.jid, room.name)}
-                            className="bg-red-600 hover:bg-red-700"
-                          >
-                            Delete Room
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                        {room.isOwner && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-6 w-6 p-0 hover:bg-red-100"
+                              >
+                                <Trash2 className="h-3 w-3 text-red-500" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Room</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{room.name}"? This action cannot be undone.
+                                  {room.isPermanent && " This is a permanent room and will be completely removed from the server."}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleDeleteRoom(room.jid, room.name)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete Room
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </ScrollArea>
 
