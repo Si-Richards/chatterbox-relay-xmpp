@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { useXMPPStore } from '@/store/xmppStore';
+import { toast } from '@/hooks/use-toast';
 
 // Simple markdown parser for basic formatting
 const parseMarkdown = (text: string) => {
@@ -24,6 +26,8 @@ const parseMarkdown = (text: string) => {
 export const ChatArea = () => {
   const [messageText, setMessageText] = useState('');
   const [markdownEnabled, setMarkdownEnabled] = useState(true);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editDescription, setEditDescription] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -38,6 +42,7 @@ export const ChatArea = () => {
     sendFileMessage,
     deleteMessage,
     addReaction,
+    updateRoomDescription,
     userAvatar
   } = useXMPPStore();
 
@@ -53,6 +58,40 @@ export const ChatArea = () => {
       const room = rooms.find(r => r.jid === activeChat);
       return room ? room.name : activeChat.split('@')[0];
     }
+  };
+
+  const getChatDescription = () => {
+    if (!activeChat || activeChatType !== 'groupchat') return '';
+    const room = rooms.find(r => r.jid === activeChat);
+    return room?.description || '';
+  };
+
+  const isRoomOwner = () => {
+    if (!activeChat || activeChatType !== 'groupchat') return false;
+    const room = rooms.find(r => r.jid === activeChat);
+    return room?.isOwner || false;
+  };
+
+  const handleEditDescription = () => {
+    setEditDescription(getChatDescription());
+    setIsEditingDescription(true);
+  };
+
+  const handleSaveDescription = () => {
+    if (!activeChat) return;
+    
+    updateRoomDescription(activeChat, editDescription);
+    setIsEditingDescription(false);
+    
+    toast({
+      title: "Description Updated",
+      description: "Room description has been updated successfully"
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingDescription(false);
+    setEditDescription('');
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -234,11 +273,56 @@ export const ChatArea = () => {
               </Avatar>
             )}
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="font-semibold text-gray-900">{getChatName()}</h2>
-            <p className="text-sm text-gray-500">
-              {activeChatType === 'groupchat' ? 'Group Chat' : 'Direct Message'}
-            </p>
+            {activeChatType === 'groupchat' && (
+              <div className="flex items-center space-x-2">
+                {isEditingDescription ? (
+                  <div className="flex items-center space-x-2 w-full">
+                    <Input
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      placeholder="Enter room description..."
+                      className="text-sm h-6"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleSaveDescription}
+                      className="h-6 w-6 p-0"
+                    >
+                      <Save className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm text-gray-500">
+                      {getChatDescription() || 'Group Chat'}
+                    </p>
+                    {isRoomOwner() && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleEditDescription}
+                        className="h-5 w-5 p-0 hover:bg-gray-100"
+                      >
+                        <Edit2 className="h-3 w-3 text-gray-400" />
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {activeChatType === 'chat' && (
+              <p className="text-sm text-gray-500">Direct Message</p>
+            )}
           </div>
         </div>
       </div>

@@ -34,6 +34,7 @@ interface Contact {
 interface Room {
   jid: string;
   name: string;
+  description?: string;
   participants: string[];
   isOwner?: boolean;
   isPermanent?: boolean;
@@ -58,7 +59,8 @@ interface XMPPState {
   sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
-  createRoom: (roomName: string, isPermanent?: boolean) => void;
+  createRoom: (roomName: string, description?: string, isPermanent?: boolean) => void;
+  updateRoomDescription: (roomJid: string, description: string) => void;
   deleteRoom: (roomJid: string) => void;
   joinRoom: (roomJid: string) => void;
   inviteToRoom: (roomJid: string, userJid: string) => void;
@@ -482,7 +484,7 @@ export const useXMPPStore = create<XMPPState>()(
         }));
       },
       
-      createRoom: (roomName: string, isPermanent: boolean = false) => {
+      createRoom: (roomName: string, description?: string, isPermanent: boolean = false) => {
         const { client, currentUser } = get();
         if (!client) return;
 
@@ -520,14 +522,26 @@ export const useXMPPStore = create<XMPPState>()(
         set((state) => ({
           rooms: [...state.rooms, { 
             jid: roomJid, 
-            name: roomName, 
+            name: roomName,
+            description: description || '',
             participants: [],
             isOwner: true,
             isPermanent
           }]
         }));
       },
+
+      updateRoomDescription: (roomJid: string, description: string) => {
+        set((state) => ({
+          rooms: state.rooms.map(room => 
+            room.jid === roomJid 
+              ? { ...room, description }
+              : room
+          )
+        }));
+      },
       
+      // ... keep existing code (deleteRoom, joinRoom, inviteToRoom, kickFromRoom, setActiveChat, setUserStatus, setUserAvatar, markMessageAsDelivered, markMessageAsRead, fetchServerUsers, addReaction methods)
       deleteRoom: (roomJid: string) => {
         const { client, rooms } = get();
         if (!client) return;

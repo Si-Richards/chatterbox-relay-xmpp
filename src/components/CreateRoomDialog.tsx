@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
@@ -25,6 +26,7 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
   onOpenChange,
 }) => {
   const [roomName, setRoomName] = useState('');
+  const [roomDescription, setRoomDescription] = useState('');
   const [isPermanent, setIsPermanent] = useState(false);
   const { createRoom } = useXMPPStore();
 
@@ -41,8 +43,9 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
     }
 
     const cleanRoomName = roomName.trim().toLowerCase().replace(/\s+/g, '-');
-    createRoom(cleanRoomName, isPermanent);
+    createRoom(cleanRoomName, roomDescription.trim(), isPermanent);
     setRoomName('');
+    setRoomDescription('');
     setIsPermanent(false);
     onOpenChange(false);
     
@@ -58,7 +61,7 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Create Group Chat</DialogTitle>
           <DialogDescription>
-            Enter a name for your new group chat room and choose if it should be permanent.
+            Enter a name and description for your new group chat room and choose if it should be permanent.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -69,6 +72,16 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
               placeholder="my-awesome-room"
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="room-description">Description (optional)</Label>
+            <Textarea
+              id="room-description"
+              placeholder="Describe what this room is about..."
+              value={roomDescription}
+              onChange={(e) => setRoomDescription(e.target.value)}
+              rows={3}
             />
           </div>
           <div className="flex items-center space-x-2">
