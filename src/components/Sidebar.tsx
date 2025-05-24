@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
-import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +53,7 @@ export const Sidebar = () => {
     userStatus, 
     setUserStatus 
   } = useXMPPStore();
+  
   const [newContactJid, setNewContactJid] = useState('');
   const [roomJidToJoin, setRoomJidToJoin] = useState('');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
@@ -299,6 +299,7 @@ export const Sidebar = () => {
                     }}>
                     Browse Users
                   </CommandItem>
+                  <CommandSeparator />
                   <CommandItem onSelect={() => {
                       setOpen(false)
                       setIsCreateRoomOpen(true)
@@ -316,6 +317,16 @@ export const Sidebar = () => {
             </Command>
           </PopoverContent>
         </Popover>
+        
+        {/* Directory Button */}
+        <Button
+          variant="outline"
+          className="w-full justify-start pl-3 font-normal mt-2"
+          onClick={() => setIsUserBrowserOpen(true)}
+        >
+          <Users className="mr-2 h-4 w-4" />
+          User Directory
+        </Button>
       </div>
 
       {/* Add Contact Dialog */}

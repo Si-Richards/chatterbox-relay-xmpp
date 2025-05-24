@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { Send, Hash, User, MessageSquare, Check } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { useXMPPStore } from '@/store/xmppStore';
@@ -22,7 +22,9 @@ const parseMarkdown = (text: string) => {
 
 export const ChatArea = () => {
   const [messageText, setMessageText] = useState('');
+  const [markdownEnabled, setMarkdownEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const { 
     activeChat, 
@@ -57,6 +59,40 @@ export const ChatArea = () => {
     
     sendMessage(activeChat, messageText, activeChatType);
     setMessageText('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
+
+  const insertMarkdown = (type: 'bold' | 'italic') => {
+    if (!textareaRef.current) return;
+    
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = messageText.substring(start, end);
+    
+    let wrapper = '';
+    if (type === 'bold') wrapper = '**';
+    if (type === 'italic') wrapper = '*';
+    
+    const newText = 
+      messageText.substring(0, start) + 
+      wrapper + selectedText + wrapper + 
+      messageText.substring(end);
+    
+    setMessageText(newText);
+    
+    // Focus back and set cursor position
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + wrapper.length + selectedText.length + wrapper.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
   };
 
   const handleDeleteMessage = (messageId: string) => {
@@ -227,15 +263,15 @@ export const ChatArea = () => {
                     )}
                     {message.body && (
                       <div 
-                        className="text-sm break-words"
-                        dangerouslySetInnerHTML={{ __html: parseMarkdown(message.body) }}
+                        className="text-sm break-words whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{ __html: markdownEnabled ? parseMarkdown(message.body) : message.body }}
                       />
                     )}
                   </div>
                 ) : (
                   <div 
-                    className="text-sm break-words"
-                    dangerouslySetInnerHTML={{ __html: parseMarkdown(message.body) }}
+                    className="text-sm break-words whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: markdownEnabled ? parseMarkdown(message.body) : message.body }}
                   />
                 )}
                 
@@ -303,18 +339,65 @@ export const ChatArea = () => {
             onGifSelect={handleGifSelect}
             showDelete={false}
           />
+          
+          {/* Markdown Controls */}
+          <div className="flex items-center space-x-1 border-l pl-2">
+            <Button
+              variant={markdownEnabled ? "default" : "ghost"}
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setMarkdownEnabled(!markdownEnabled)}
+              title="Toggle Markdown"
+            >
+              <Type className="h-3 w-3" />
+            </Button>
+            {markdownEnabled && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => insertMarkdown('bold')}
+                  title="Bold"
+                >
+                  <Bold className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => insertMarkdown('italic')}
+                  title="Italic"
+                >
+                  <Italic className="h-3 w-3" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <Input
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            placeholder={`Message ${getChatName()}... (Use **bold** or *italic*)`}
-            className="flex-1"
-          />
+          <div className="flex-1 relative">
+            <Textarea
+              ref={textareaRef}
+              value={messageText}
+              onChange={(e) => {
+                if (e.target.value.length <= 1000) {
+                  setMessageText(e.target.value);
+                }
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${getChatName()}... ${markdownEnabled ? '(Use **bold** or *italic*)' : ''}`}
+              className="min-h-[40px] max-h-[120px] resize-none"
+              rows={1}
+            />
+            <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+              {messageText.length}/1000
+            </div>
+          </div>
           <Button 
             type="submit" 
             disabled={!messageText.trim()}
-            className="bg-blue-500 hover:bg-blue-600"
+            className="bg-blue-500 hover:bg-blue-600 self-end"
           >
             <Send className="w-4 h-4" />
           </Button>
