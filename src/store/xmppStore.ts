@@ -70,6 +70,48 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   
   // Handle XMPP stanzas (messages, presence, etc.)
   handleStanza: (stanza: any) => {
+    // Handle roster (contact list) response
+    if (stanza.is('iq') && stanza.attrs.type === 'result') {
+      const query = stanza.getChild('query', 'jabber:iq:roster');
+      if (query) {
+        const items = query.getChildren('item');
+        const contacts: Contact[] = items.map((item: any) => ({
+          jid: item.attrs.jid,
+          name: item.attrs.name || item.attrs.jid.split('@')[0],
+          presence: 'offline',
+          avatar: null
+        }));
+        
+        set({ contacts });
+        
+        // Request presence for all contacts
+        const { client } = get();
+        if (client) {
+          contacts.forEach(contact => {
+            const presenceProbe = xml('presence', { to: contact.jid, type: 'probe' });
+            client.send(presenceProbe);
+          });
+        }
+        
+        return;
+      }
+      
+      // Handle disco#items response for MUC discovery
+      const discoQuery = stanza.getChild('query', 'http://jabber.org/protocol/disco#items');
+      if (discoQuery && stanza.attrs.from?.includes('conference')) {
+        const items = discoQuery.getChildren('item');
+        const rooms: Room[] = items.map((item: any) => ({
+          jid: item.attrs.jid,
+          name: item.attrs.name || item.attrs.jid.split('@')[0],
+          participants: [],
+          isOwner: false
+        }));
+        
+        set({ rooms });
+        return;
+      }
+    }
+
     // Handle messages
     if (stanza.is('message')) {
       const from = stanza.attrs.from;
@@ -210,7 +252,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   connect: async (username: string, password: string) => {
     try {
       const xmppClient = client({
-        service: 'wss://ejabberd.voicehost.io:443/websocket', // Updated port to 443
+        service: 'wss://ejabberd.voicehost.io:443/websocket',
         domain: 'ejabberd.voicehost.io',
         username: username,
         password: password,
@@ -234,6 +276,22 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         
         // Send initial presence
         xmppClient.send(xml('presence'));
+        
+        // Fetch roster (contact list)
+        const rosterIq = xml(
+          'iq',
+          { type: 'get', id: 'roster-1' },
+          xml('query', { xmlns: 'jabber:iq:roster' })
+        );
+        xmppClient.send(rosterIq);
+        
+        // Discover MUC rooms on the conference server
+        const discoIq = xml(
+          'iq',
+          { type: 'get', to: 'conference.ejabberd.voicehost.io', id: 'disco-rooms' },
+          xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+        );
+        xmppClient.send(discoIq);
       });
 
       xmppClient.on('stanza', (stanza: any) => {
