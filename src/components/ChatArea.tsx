@@ -110,12 +110,26 @@ export const ChatArea = () => {
     scrollToBottom();
   }, [currentMessages]);
 
-  const formatTime = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    }).format(date);
+  const formatTime = (date: Date | string) => {
+    try {
+      // Ensure we have a valid Date object
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      
+      // Check if the date is valid
+      if (isNaN(dateObj.getTime())) {
+        console.warn('Invalid date received:', date);
+        return 'Invalid time';
+      }
+      
+      return new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).format(dateObj);
+    } catch (error) {
+      console.error('Error formatting time:', error, 'Date:', date);
+      return 'Invalid time';
+    }
   };
 
   const isFromCurrentUser = (fromJid: string) => {

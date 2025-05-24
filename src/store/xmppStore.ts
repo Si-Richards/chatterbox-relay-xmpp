@@ -194,7 +194,7 @@ export const useXMPPStore = create<XMPPState>()(
               from,
               to,
               body,
-              timestamp: new Date(),
+              timestamp: new Date(), // Always create new Date object
               type: type as 'chat' | 'groupchat',
               status: 'delivered'
             };
@@ -371,7 +371,7 @@ export const useXMPPStore = create<XMPPState>()(
           from: currentUser,
           to,
           body: body.trim(),
-          timestamp: new Date(),
+          timestamp: new Date(), // Always create new Date object
           type,
           status: 'sent'
         };
@@ -415,7 +415,7 @@ export const useXMPPStore = create<XMPPState>()(
           from: currentUser,
           to,
           body: `Shared ${fileData.type.startsWith('image/') ? 'an image' : 'a file'}: ${fileData.name}`,
-          timestamp: new Date(),
+          timestamp: new Date(), // Always create new Date object
           type,
           status: 'sent',
           fileData
@@ -916,7 +916,23 @@ export const useXMPPStore = create<XMPPState>()(
         rooms: state.rooms,
         userAvatar: state.userAvatar,
         userStatus: state.userStatus
-      })
+      }),
+      // Transform data when loading from storage to ensure Date objects
+      onRehydrateStorage: () => (state) => {
+        if (state?.messages) {
+          // Convert timestamp strings back to Date objects
+          const messagesWithDates = Object.fromEntries(
+            Object.entries(state.messages).map(([chatJid, messages]) => [
+              chatJid,
+              messages.map(msg => ({
+                ...msg,
+                timestamp: typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp
+              }))
+            ])
+          );
+          state.messages = messagesWithDates;
+        }
+      }
     }
   )
 );
