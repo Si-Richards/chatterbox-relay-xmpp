@@ -916,26 +916,7 @@ export const useXMPPStore = create<XMPPState>()(
         rooms: state.rooms,
         userAvatar: state.userAvatar,
         userStatus: state.userStatus
-      }),
-      // Custom serialization to handle Date objects
-      serialize: (state) => {
-        const serialized = JSON.stringify(state, (key, value) => {
-          if (value instanceof Date) {
-            return { __type: 'Date', value: value.toISOString() };
-          }
-          return value;
-        });
-        return serialized;
-      },
-      deserialize: (str) => {
-        const parsed = JSON.parse(str, (key, value) => {
-          if (value && typeof value === 'object' && value.__type === 'Date') {
-            return new Date(value.value);
-          }
-          return value;
-        });
-        return parsed;
-      }
+      })
     }
   )
 );
