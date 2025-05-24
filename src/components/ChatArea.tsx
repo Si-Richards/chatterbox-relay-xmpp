@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
+import { MessageReactions } from './MessageReactions';
 import { useXMPPStore } from '@/store/xmppStore';
 
 // Simple markdown parser for basic formatting
@@ -36,6 +37,7 @@ export const ChatArea = () => {
     sendMessage,
     sendFileMessage,
     deleteMessage,
+    addReaction,
     userAvatar
   } = useXMPPStore();
 
@@ -180,6 +182,11 @@ export const ChatArea = () => {
     sendFileMessage(activeChat, gifData, activeChatType);
   };
 
+  const handleMessageReaction = (messageId: string, emoji: string) => {
+    if (!activeChat) return;
+    addReaction(activeChat, messageId, emoji);
+  };
+
   if (!activeChat) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -312,6 +319,20 @@ export const ChatArea = () => {
               )}
               <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
                 {messageContent}
+                {message.reactions && message.reactions.length > 0 && (
+                  <MessageReactions
+                    reactions={message.reactions}
+                    onReact={(emoji) => handleMessageReaction(message.id, emoji)}
+                    currentUser={currentUser}
+                  />
+                )}
+                {!message.reactions || message.reactions.length === 0 ? (
+                  <MessageReactions
+                    reactions={[]}
+                    onReact={(emoji) => handleMessageReaction(message.id, emoji)}
+                    currentUser={currentUser}
+                  />
+                ) : null}
               </div>
               {isOwn && (
                 <div className="ml-2 flex-shrink-0">
