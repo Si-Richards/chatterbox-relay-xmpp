@@ -199,17 +199,36 @@ export const Sidebar = () => {
                     <p className="text-xs text-gray-500">{room.participants.length} participants</p>
                   </div>
                   {room.isOwner && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteRoom(room.jid, room.name);
-                      }}
-                      className="h-6 w-6 p-0 hover:bg-red-100"
-                    >
-                      <Trash2 className="h-3 w-3 text-red-500" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-6 w-6 p-0 hover:bg-red-100"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Room</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete "{room.name}"? This action cannot be undone.
+                            {room.isPermanent && " This is a permanent room and will be completely removed from the server."}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={() => handleDeleteRoom(room.jid, room.name)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete Room
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   )}
                 </CardContent>
               </Card>

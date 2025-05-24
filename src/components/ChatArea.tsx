@@ -2,14 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Send, Hash, User, MessageSquare, Trash2, Check } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { MessageActions } from './MessageActions';
 import { useXMPPStore } from '@/store/xmppStore';
 
 export const ChatArea = () => {
@@ -24,6 +19,7 @@ export const ChatArea = () => {
     contacts,
     rooms,
     sendMessage,
+    sendFileMessage,
     deleteMessage,
     userAvatar
   } = useXMPPStore();
@@ -99,6 +95,42 @@ export const ChatArea = () => {
     return contact?.avatar;
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageText(prev => prev + emoji);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!activeChat || !activeChatType) return;
+    
+    // For demo purposes, we'll convert the file to a data URL
+    // In a real implementation, you'd upload to a file server
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const fileData = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: e.target?.result as string
+      };
+      
+      sendFileMessage(activeChat, fileData, activeChatType);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    if (!activeChat || !activeChatType) return;
+    
+    const gifData = {
+      name: 'animated.gif',
+      type: 'image/gif',
+      size: 0,
+      url: gifUrl
+    };
+    
+    sendFileMessage(activeChat, gifData, activeChatType);
+  };
+
   if (!activeChat) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -150,25 +182,59 @@ export const ChatArea = () => {
             : message.from.split('@')[0];
 
           const messageContent = (
-            <div
-              className={`px-4 py-2 rounded-lg ${
-                isOwn
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white border border-gray-200'
-              }`}
-            >
-              {!isOwn && activeChatType === 'groupchat' && (
-                <p className="text-xs font-medium mb-1 text-blue-600">
-                  {senderName}
-                </p>
-              )}
-              <p className="text-sm break-words">{message.body}</p>
-              <div className={`text-xs mt-1 flex items-center ${
-                isOwn ? 'text-blue-100' : 'text-gray-500'
-              }`}>
-                <span>{formatTime(message.timestamp)}</span>
-                {isOwn && getMessageStatusIcon(message.status)}
+            <div className="flex items-start space-x-2">
+              <div
+                className={`px-4 py-2 rounded-lg ${
+                  isOwn
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white border border-gray-200'
+                }`}
+              >
+                {!isOwn && activeChatType === 'groupchat' && (
+                  <p className="text-xs font-medium mb-1 text-blue-600">
+                    {senderName}
+                  </p>
+                )}
+                
+                {message.fileData ? (
+                  <div className="space-y-2">
+                    {message.fileData.type.startsWith('image/') ? (
+                      <img 
+                        src={message.fileData.url} 
+                        alt={message.fileData.name}
+                        className="max-w-xs rounded"
+                      />
+                    ) : (
+                      <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
+                        <div className="text-sm">
+                          <p className="font-medium">{message.fileData.name}</p>
+                          <p className="text-gray-500">{(message.fileData.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                      </div>
+                    )}
+                    {message.body && <p className="text-sm break-words">{message.body}</p>}
+                  </div>
+                ) : (
+                  <p className="text-sm break-words">{message.body}</p>
+                )}
+                
+                <div className={`text-xs mt-1 flex items-center ${
+                  isOwn ? 'text-blue-100' : 'text-gray-500'
+                }`}>
+                  <span>{formatTime(message.timestamp)}</span>
+                  {isOwn && getMessageStatusIcon(message.status)}
+                </div>
               </div>
+              
+              {isOwn && (
+                <MessageActions
+                  onDelete={() => handleDeleteMessage(message.id)}
+                  onEmojiSelect={handleEmojiSelect}
+                  onFileUpload={handleFileUpload}
+                  onGifSelect={handleGifSelect}
+                  showDelete={true}
+                />
+              )}
             </div>
           );
 
@@ -188,21 +254,7 @@ export const ChatArea = () => {
                 </div>
               )}
               <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
-                {isOwn ? (
-                  <ContextMenu>
-                    <ContextMenuTrigger>
-                      {messageContent}
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      <ContextMenuItem onClick={() => handleDeleteMessage(message.id)}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete Message
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                ) : (
-                  messageContent
-                )}
+                {messageContent}
               </div>
               {isOwn && (
                 <div className="ml-2 flex-shrink-0">
@@ -222,6 +274,15 @@ export const ChatArea = () => {
 
       {/* Message Input */}
       <div className="bg-white border-t border-gray-200 p-4">
+        <div className="flex items-center space-x-2 mb-2">
+          <MessageActions
+            onDelete={() => {}}
+            onEmojiSelect={handleEmojiSelect}
+            onFileUpload={handleFileUpload}
+            onGifSelect={handleGifSelect}
+            showDelete={false}
+          />
+        </div>
         <form onSubmit={handleSendMessage} className="flex space-x-2">
           <Input
             value={messageText}

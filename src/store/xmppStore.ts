@@ -8,14 +8,20 @@ interface Message {
   body: string;
   timestamp: Date;
   type: 'chat' | 'groupchat';
-  status?: 'sent' | 'delivered' | 'read'; // Added message status
+  status?: 'sent' | 'delivered' | 'read';
+  fileData?: {
+    name: string;
+    type: string;
+    size: number;
+    url: string;
+  };
 }
 
 interface Contact {
   jid: string;
   name: string;
-  presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa'; // Added more status options
-  avatar?: string; // Added avatar URL field
+  presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa';
+  avatar?: string;
 }
 
 interface Room {
@@ -42,6 +48,7 @@ interface XMPPState {
   connect: (username: string, password: string) => Promise<void>;
   disconnect: () => void;
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
+  sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
   createRoom: (roomName: string, isPermanent?: boolean) => void;
@@ -357,6 +364,51 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       timestamp: new Date(),
       type,
       status: 'sent'
+    };
+
+    const chatJid = type === 'groupchat' ? to : to.split('/')[0];
+    
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [chatJid]: [...(state.messages[chatJid] || []), newMessage]
+      }
+    }));
+  },
+
+  sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => {
+    const { client, currentUser } = get();
+    if (!client) return;
+
+    const messageId = `msg-${Date.now()}`;
+    
+    // For XMPP file transfer, we would normally use XEP-0096 (SI File Transfer)
+    // For this demo, we'll send as a message with file info
+    const message = xml(
+      'message',
+      { to, type, id: messageId },
+      xml('body', {}, `Shared ${fileData.type.startsWith('image/') ? 'an image' : 'a file'}: ${fileData.name}`),
+      xml('file', { 
+        xmlns: 'urn:xmpp:file-transfer',
+        name: fileData.name,
+        type: fileData.type,
+        size: fileData.size.toString(),
+        url: fileData.url
+      })
+    );
+
+    client.send(message);
+
+    // Add to local messages
+    const newMessage: Message = {
+      id: messageId,
+      from: currentUser,
+      to,
+      body: `Shared ${fileData.type.startsWith('image/') ? 'an image' : 'a file'}: ${fileData.name}`,
+      timestamp: new Date(),
+      type,
+      status: 'sent',
+      fileData
     };
 
     const chatJid = type === 'groupchat' ? to : to.split('/')[0];
