@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
+import { RoomSettings } from './RoomSettings';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 
@@ -28,6 +29,7 @@ export const ChatArea = () => {
   const [markdownEnabled, setMarkdownEnabled] = useState(true);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editDescription, setEditDescription] = useState('');
+  const [roomSettingsOpen, setRoomSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -324,6 +326,19 @@ export const ChatArea = () => {
               <p className="text-sm text-gray-500">Direct Message</p>
             )}
           </div>
+          
+          {/* Room Settings Button */}
+          {activeChatType === 'groupchat' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRoomSettingsOpen(true)}
+              className="flex items-center space-x-1"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -522,6 +537,15 @@ export const ChatArea = () => {
           </Button>
         </form>
       </div>
+
+      {/* Room Settings Dialog */}
+      {activeChatType === 'groupchat' && activeChat && (
+        <RoomSettings
+          open={roomSettingsOpen}
+          onOpenChange={setRoomSettingsOpen}
+          roomJid={activeChat}
+        />
+      )}
     </div>
   );
 };

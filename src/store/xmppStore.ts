@@ -31,6 +31,13 @@ interface Contact {
   avatar?: string;
 }
 
+interface RoomAffiliation {
+  jid: string;
+  name: string;
+  affiliation: 'owner' | 'admin' | 'member' | 'none';
+  role: 'moderator' | 'participant' | 'visitor' | 'none';
+}
+
 interface Room {
   jid: string;
   name: string;
@@ -38,6 +45,7 @@ interface Room {
   participants: string[];
   isOwner?: boolean;
   isPermanent?: boolean;
+  affiliations?: RoomAffiliation[];
 }
 
 interface XMPPState {
@@ -73,6 +81,8 @@ interface XMPPState {
   fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
   handleStanza: (stanza: any) => void;
   addReaction: (chatJid: string, messageId: string, emoji: string) => void;
+  fetchRoomAffiliations: (roomJid: string) => void;
+  setRoomAffiliation: (roomJid: string, userJid: string, affiliation: 'owner' | 'admin' | 'member' | 'none') => void;
 }
 
 export const useXMPPStore = create<XMPPState>()(
@@ -126,10 +136,33 @@ export const useXMPPStore = create<XMPPState>()(
               name: item.attrs.name || item.attrs.jid.split('@')[0],
               participants: [],
               isOwner: false,
-              isPermanent: true // Assume existing rooms are permanent
+              isPermanent: true,
+              affiliations: []
             }));
             
             set({ rooms });
+            return;
+          }
+          
+          // Handle room affiliations response
+          const adminQuery = stanza.getChild('query', 'http://jabber.org/protocol/muc#admin');
+          if (adminQuery) {
+            const roomJid = stanza.attrs.from;
+            const items = adminQuery.getChildren('item');
+            const affiliations: RoomAffiliation[] = items.map((item: any) => ({
+              jid: item.attrs.jid,
+              name: item.attrs.jid?.split('@')[0] || 'Unknown',
+              affiliation: item.attrs.affiliation || 'none',
+              role: item.attrs.role || 'none'
+            }));
+            
+            set((state) => ({
+              rooms: state.rooms.map(room => 
+                room.jid === roomJid 
+                  ? { ...room, affiliations }
+                  : room
+              )
+            }));
             return;
           }
         }
@@ -526,7 +559,8 @@ export const useXMPPStore = create<XMPPState>()(
             description: description || '',
             participants: [],
             isOwner: true,
-            isPermanent
+            isPermanent,
+            affiliations: []
           }]
         }));
       },
@@ -541,7 +575,6 @@ export const useXMPPStore = create<XMPPState>()(
         }));
       },
       
-      // ... keep existing code (deleteRoom, joinRoom, inviteToRoom, kickFromRoom, setActiveChat, setUserStatus, setUserAvatar, markMessageAsDelivered, markMessageAsRead, fetchServerUsers, addReaction methods)
       deleteRoom: (roomJid: string) => {
         const { client, rooms } = get();
         if (!client) return;
@@ -585,7 +618,7 @@ export const useXMPPStore = create<XMPPState>()(
         client.send(presence);
 
         set((state) => ({
-          rooms: [...state.rooms, { jid: roomJid, name: roomJid.split('@')[0], participants: [] }]
+          rooms: [...state.rooms, { jid: roomJid, name: roomJid.split('@')[0], participants: [], affiliations: [] }]
         }));
       },
       
@@ -920,6 +953,80 @@ export const useXMPPStore = create<XMPPState>()(
             }
           };
         });
+      },
+
+      fetchRoomAffiliations: (roomJid: string) => {
+        const { client } = get();
+        if (!client) return;
+
+        const iq = xml(
+          'iq',
+          { type: 'get', to: roomJid, id: `affiliations-${Date.now()}` },
+          xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
+            xml('item', { affiliation: 'owner' }),
+            xml('item', { affiliation: 'admin' }),
+            xml('item', { affiliation: 'member' })
+          )
+        );
+
+        client.send(iq);
+      },
+
+      setRoomAffiliation: (roomJid: string, userJid: string, affiliation: 'owner' | 'admin' | 'member' | 'none') => {
+        const { client, currentUser } = get();
+        if (!client) return;
+
+        const iq = xml(
+          'iq',
+          { type: 'set', to: roomJid, id: `set-affiliation-${Date.now()}` },
+          xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
+            xml('item', { jid: userJid, affiliation })
+          )
+        );
+
+        client.send(iq);
+
+        // Update local state
+        set((state) => ({
+          rooms: state.rooms.map(room => {
+            if (room.jid === roomJid && room.affiliations) {
+              const updatedAffiliations = room.affiliations.map(aff => 
+                aff.jid === userJid ? { ...aff, affiliation } : aff
+              );
+              
+              // If user not in affiliations list, add them
+              if (!room.affiliations.find(aff => aff.jid === userJid)) {
+                updatedAffiliations.push({
+                  jid: userJid,
+                  name: userJid.split('@')[0],
+                  affiliation,
+                  role: 'participant'
+                });
+              }
+              
+              return { ...room, affiliations: updatedAffiliations };
+            }
+            return room;
+          })
+        }));
+
+        // Add system message
+        const systemMessage: Message = {
+          id: `affiliation-${Date.now()}`,
+          from: currentUser,
+          to: roomJid,
+          body: `Set ${userJid.split('@')[0]}'s affiliation to ${affiliation}`,
+          timestamp: new Date(),
+          type: 'groupchat',
+          status: 'sent'
+        };
+        
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [roomJid]: [...(state.messages[roomJid] || []), systemMessage]
+          }
+        }));
       }
     }),
     {
@@ -931,7 +1038,6 @@ export const useXMPPStore = create<XMPPState>()(
         userAvatar: state.userAvatar,
         userStatus: state.userStatus
       }),
-      // Transform data when loading from storage to ensure Date objects
       onRehydrateStorage: () => (state) => {
         if (state?.messages) {
           // Convert timestamp strings back to Date objects
