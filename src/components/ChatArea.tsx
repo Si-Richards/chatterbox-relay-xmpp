@@ -388,21 +388,28 @@ export const ChatArea = () => {
                     <Separator />
                     <ScrollArea className="h-48">
                       <div className="space-y-2">
-                        {getRoomParticipants().map((participant, index) => (
-                          <div key={index} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback>
-                                <User className="h-3 w-3" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm">{participant.nick || participant.jid}</span>
-                            {participant.affiliation && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                {participant.affiliation}
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                        {getRoomParticipants().map((participant, index) => {
+                          // Handle both string and object participants
+                          const participantData = typeof participant === 'string' 
+                            ? { jid: participant, nick: participant.split('@')[0], affiliation: 'member' }
+                            : participant;
+                          
+                          return (
+                            <div key={index} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback>
+                                  <User className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm">{participantData.nick || participantData.jid}</span>
+                              {participantData.affiliation && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                  {participantData.affiliation}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                         {getRoomParticipants().length === 0 && (
                           <p className="text-sm text-gray-500 text-center py-4">No participants</p>
                         )}
