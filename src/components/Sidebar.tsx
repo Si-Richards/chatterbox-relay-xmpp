@@ -19,21 +19,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  CommandShortcut,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { toast } from '@/hooks/use-toast';
@@ -61,7 +46,6 @@ export const Sidebar = () => {
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isJoinRoomOpen, setIsJoinRoomOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [open, setOpen] = React.useState(false)
   const [isUserBrowserOpen, setIsUserBrowserOpen] = useState(false);
   const [contactsCollapsed, setContactsCollapsed] = useState(false);
   const [roomsCollapsed, setRoomsCollapsed] = useState(false);
@@ -155,59 +139,46 @@ export const Sidebar = () => {
         </Button>
       </div>
 
-      {/* Action Buttons - Moved above search */}
-      <div className="p-4 space-y-2">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start pl-3 font-normal">
-              <Plus className="mr-2 h-4 w-4" />
-              New Chat
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0">
-            <Command>
-              <CommandList>
-                <CommandGroup>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsAddContactOpen(true)
-                    }}>
-                    Add Contact
-                  </CommandItem>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsUserBrowserOpen(true)
-                    }}>
-                    Browse Users
-                  </CommandItem>
-                  <CommandSeparator />
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsCreateRoomOpen(true)
-                    }}>
-                    Create Room
-                  </CommandItem>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsJoinRoomOpen(true)
-                    }}>
-                    Join Room
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        
-        {/* Directory Button */}
-        <Button
-          variant="outline"
-          className="w-full justify-start pl-3 font-normal"
-          onClick={() => setIsUserBrowserOpen(true)}
-        >
-          <Users className="mr-2 h-4 w-4" />
-          User Directory
-        </Button>
+      {/* Action Buttons Row */}
+      <div className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAddContactOpen(true)}
+            className="flex-1"
+            title="Add Contact"
+          >
+            <UserPlus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsUserBrowserOpen(true)}
+            className="flex-1"
+            title="Browse Users"
+          >
+            <Users className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCreateRoomOpen(true)}
+            className="flex-1"
+            title="Create Room"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsJoinRoomOpen(true)}
+            className="flex-1"
+            title="Join Room"
+          >
+            <Hash className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Search Bar */}

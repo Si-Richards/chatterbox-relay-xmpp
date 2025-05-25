@@ -4,11 +4,29 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings, Users, UserPlus } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { RoomSettings } from './RoomSettings';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 
@@ -31,6 +49,8 @@ export const ChatArea = () => {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editDescription, setEditDescription] = useState('');
   const [roomSettingsOpen, setRoomSettingsOpen] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [inviteUsersOpen, setInviteUsersOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -70,6 +90,12 @@ export const ChatArea = () => {
     if (!activeChat || activeChatType !== 'groupchat') return '';
     const room = rooms.find(r => r.jid === activeChat);
     return room?.description || '';
+  };
+
+  const getRoomParticipants = () => {
+    if (!activeChat || activeChatType !== 'groupchat') return [];
+    const room = rooms.find(r => r.jid === activeChat);
+    return room?.participants || [];
   };
 
   const isRoomOwner = () => {
@@ -246,6 +272,14 @@ export const ChatArea = () => {
     addReaction(activeChat, messageId, emoji);
   };
 
+  const handleInviteUsers = () => {
+    toast({
+      title: "Invite Users",
+      description: "Feature coming soon"
+    });
+    setInviteUsersOpen(false);
+  };
+
   if (!activeChat) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -264,84 +298,159 @@ export const ChatArea = () => {
     <div className="flex-1 flex flex-col h-screen">
       {/* Chat Header */}
       <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-            activeChatType === 'groupchat' ? 'bg-green-100' : 'bg-blue-100'
-          }`}>
-            {activeChatType === 'groupchat' ? (
-              <Hash className="w-5 h-5 text-green-600" />
-            ) : (
-              <Avatar>
-                <AvatarImage src={getContactAvatar(activeChat)} />
-                <AvatarFallback>
-                  <User className="w-5 h-5 text-blue-600" />
-                </AvatarFallback>
-              </Avatar>
-            )}
-          </div>
-          <div className="flex-1">
-            <h2 className="font-semibold text-gray-900">{getChatName()}</h2>
-            {activeChatType === 'groupchat' && (
-              <div className="flex items-center space-x-2">
-                {isEditingDescription ? (
-                  <div className="flex items-center space-x-2 w-full">
-                    <Input
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      placeholder="Enter room description..."
-                      className="text-sm h-6"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={handleSaveDescription}
-                      className="h-6 w-6 p-0"
-                    >
-                      <Save className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      className="h-6 w-6 p-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <p className="text-sm text-gray-500">
-                      {getChatDescription() || 'Group Chat'}
-                    </p>
-                    {isRoomOwner() && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              activeChatType === 'groupchat' ? 'bg-green-100' : 'bg-blue-100'
+            }`}>
+              {activeChatType === 'groupchat' ? (
+                <Hash className="w-5 h-5 text-green-600" />
+              ) : (
+                <Avatar>
+                  <AvatarImage src={getContactAvatar(activeChat)} />
+                  <AvatarFallback>
+                    <User className="w-5 h-5 text-blue-600" />
+                  </AvatarFallback>
+                </Avatar>
+              )}
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-gray-900">{getChatName()}</h2>
+              {activeChatType === 'groupchat' && (
+                <div className="flex items-center space-x-2">
+                  {isEditingDescription ? (
+                    <div className="flex items-center space-x-2 w-full">
+                      <Input
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="Enter room description..."
+                        className="text-sm h-6"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSaveDescription}
+                        className="h-6 w-6 p-0"
+                      >
+                        <Save className="h-3 w-3" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={handleEditDescription}
-                        className="h-5 w-5 p-0 hover:bg-gray-100"
+                        onClick={handleCancelEdit}
+                        className="h-6 w-6 p-0"
                       >
-                        <Edit2 className="h-3 w-3 text-gray-400" />
+                        <X className="h-3 w-3" />
                       </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            {activeChatType === 'chat' && (
-              <p className="text-sm text-gray-500">Direct Message</p>
-            )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm text-gray-500">
+                        {getChatDescription() || 'Group Chat'}
+                      </p>
+                      {isRoomOwner() && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleEditDescription}
+                          className="h-5 w-5 p-0 hover:bg-gray-100"
+                        >
+                          <Edit2 className="h-3 w-3 text-gray-400" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeChatType === 'chat' && (
+                <p className="text-sm text-gray-500">Direct Message</p>
+              )}
+            </div>
           </div>
           
-          {/* Room Settings Button */}
+          {/* Room Action Buttons */}
           {activeChatType === 'groupchat' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRoomSettingsOpen(true)}
-              className="flex items-center space-x-1"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Button>
+            <div className="flex items-center space-x-2">
+              {/* Participants List */}
+              <Popover open={participantsOpen} onOpenChange={setParticipantsOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center space-x-1"
+                  >
+                    <Users className="h-4 w-4" />
+                    <span className="hidden sm:inline">Participants</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Room Participants</h4>
+                    <Separator />
+                    <ScrollArea className="h-48">
+                      <div className="space-y-2">
+                        {getRoomParticipants().map((participant, index) => (
+                          <div key={index} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback>
+                                <User className="h-3 w-3" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{participant.nick || participant.jid}</span>
+                            {participant.affiliation && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {participant.affiliation}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {getRoomParticipants().length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-4">No participants</p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Invite Users */}
+              <AlertDialog open={inviteUsersOpen} onOpenChange={setInviteUsersOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center space-x-1"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    <span className="hidden sm:inline">Invite</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Invite Users to Room</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Feature coming soon. You'll be able to invite users to this room.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleInviteUsers}>
+                      Invite
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Room Settings */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setRoomSettingsOpen(true)}
+                className="flex items-center space-x-1"
+              >
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -407,14 +516,16 @@ export const ChatArea = () => {
                 </div>
               </div>
               
+              {/* Only show delete button for own messages */}
               {isOwn && (
-                <MessageActions
-                  onDelete={() => handleDeleteMessage(message.id)}
-                  onEmojiSelect={handleEmojiSelect}
-                  onFileUpload={handleFileUpload}
-                  onGifSelect={handleGifSelect}
-                  showDelete={true}
-                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-red-100"
+                  onClick={() => handleDeleteMessage(message.id)}
+                >
+                  <X className="h-3 w-3 text-red-500" />
+                </Button>
               )}
             </div>
           );
