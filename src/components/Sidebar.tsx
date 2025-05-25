@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
@@ -154,8 +155,63 @@ export const Sidebar = () => {
         </Button>
       </div>
 
+      {/* Action Buttons - Moved above search */}
+      <div className="p-4 space-y-2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-full justify-start pl-3 font-normal">
+              <Plus className="mr-2 h-4 w-4" />
+              New Chat
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-0">
+            <Command>
+              <CommandList>
+                <CommandGroup>
+                  <CommandItem onSelect={() => {
+                      setOpen(false)
+                      setIsAddContactOpen(true)
+                    }}>
+                    Add Contact
+                  </CommandItem>
+                  <CommandItem onSelect={() => {
+                      setOpen(false)
+                      setIsUserBrowserOpen(true)
+                    }}>
+                    Browse Users
+                  </CommandItem>
+                  <CommandSeparator />
+                  <CommandItem onSelect={() => {
+                      setOpen(false)
+                      setIsCreateRoomOpen(true)
+                    }}>
+                    Create Room
+                  </CommandItem>
+                  <CommandItem onSelect={() => {
+                      setOpen(false)
+                      setIsJoinRoomOpen(true)
+                    }}>
+                    Join Room
+                  </CommandItem>
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        
+        {/* Directory Button */}
+        <Button
+          variant="outline"
+          className="w-full justify-start pl-3 font-normal"
+          onClick={() => setIsUserBrowserOpen(true)}
+        >
+          <Users className="mr-2 h-4 w-4" />
+          User Directory
+        </Button>
+      </div>
+
       {/* Search Bar */}
-      <div className="p-3">
+      <div className="px-4 pb-3">
         <Input
           type="text"
           placeholder="Search or start new chat"
@@ -273,61 +329,6 @@ export const Sidebar = () => {
           </Collapsible>
         </div>
       </ScrollArea>
-
-      {/* Add New Chat Button */}
-      <div className="p-4">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start pl-3 font-normal">
-              <Plus className="mr-2 h-4 w-4" />
-              New Chat
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0">
-            <Command>
-              <CommandList>
-                <CommandGroup>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsAddContactOpen(true)
-                    }}>
-                    Add Contact
-                  </CommandItem>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsUserBrowserOpen(true)
-                    }}>
-                    Browse Users
-                  </CommandItem>
-                  <CommandSeparator />
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsCreateRoomOpen(true)
-                    }}>
-                    Create Room
-                  </CommandItem>
-                  <CommandItem onSelect={() => {
-                      setOpen(false)
-                      setIsJoinRoomOpen(true)
-                    }}>
-                    Join Room
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        
-        {/* Directory Button */}
-        <Button
-          variant="outline"
-          className="w-full justify-start pl-3 font-normal mt-2"
-          onClick={() => setIsUserBrowserOpen(true)}
-        >
-          <Users className="mr-2 h-4 w-4" />
-          User Directory
-        </Button>
-      </div>
 
       {/* Add Contact Dialog */}
       <AlertDialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>

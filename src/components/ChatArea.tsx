@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -48,7 +49,10 @@ export const ChatArea = () => {
     userAvatar
   } = useXMPPStore();
 
-  const currentMessages = activeChat ? messages[activeChat] || [] : [];
+  // Fix duplicated messages by using a Set to track unique message IDs
+  const currentMessages = activeChat ? 
+    Array.from(new Map((messages[activeChat] || []).map(msg => [msg.id, msg])).values())
+    : [];
   
   const getChatName = () => {
     if (!activeChat) return '';
@@ -257,9 +261,9 @@ export const ChatArea = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col h-screen">
       {/* Chat Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
+      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center space-x-3">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
             activeChatType === 'groupchat' ? 'bg-green-100' : 'bg-blue-100'
@@ -342,8 +346,8 @@ export const ChatArea = () => {
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Messages Area - Fixed height with scroll */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
           const isOwn = isFromCurrentUser(message.from);
           const senderName = activeChatType === 'groupchat' 
@@ -463,8 +467,8 @@ export const ChatArea = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="bg-white border-t border-gray-200 p-4">
+      {/* Message Input - Fixed at bottom */}
+      <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center space-x-2 mb-2">
           <MessageActions
             onDelete={() => {}}
