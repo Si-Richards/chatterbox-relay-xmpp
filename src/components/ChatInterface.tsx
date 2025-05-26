@@ -9,7 +9,7 @@ export const ChatInterface = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gray-50">
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="flex-1">
           <ChatArea />
         </SidebarInset>
       </div>

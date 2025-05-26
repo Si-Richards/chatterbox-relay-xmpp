@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
-import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users, PanelLeftClose } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -148,7 +148,6 @@ export const AppSidebar = () => {
     <Sidebar className="border-r bg-gray-50 border-gray-200">
       <SidebarHeader className="border-b">
         <div className="flex items-center p-4">
-          <SidebarTrigger className="mr-2" />
           <AvatarSelector />
           <div className="ml-3 flex-1">
             <p className="text-sm font-medium">{currentUser.split('@')[0]}</p>
@@ -352,6 +351,12 @@ export const AppSidebar = () => {
           </div>
         </ScrollArea>
       </SidebarContent>
+
+      <SidebarFooter>
+        <div className="p-2">
+          <SidebarTrigger className="w-full" />
+        </div>
+      </SidebarFooter>
 
       {/* Dialogs */}
       <AlertDialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
