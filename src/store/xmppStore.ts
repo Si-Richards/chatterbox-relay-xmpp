@@ -101,6 +101,72 @@ export const useXMPPStore = create<XMPPState>()(
       
       // Handle XMPP stanzas (messages, presence, etc.)
       handleStanza: (stanza: any) => {
+        // Handle MAM result messages
+        if (stanza.is('message')) {
+          const result = stanza.getChild('result', 'urn:xmpp:mam:2');
+          if (result) {
+            const forwarded = result.getChild('forwarded', 'urn:xmpp:forward:0');
+            if (forwarded) {
+              const message = forwarded.getChild('message');
+              const delay = forwarded.getChild('delay', 'urn:xmpp:delay');
+              
+              if (message && message.getChildText('body')) {
+                const from = message.attrs.from;
+                const to = message.attrs.to;
+                const type = message.attrs.type || 'chat';
+                const body = message.getChildText('body');
+                const id = message.attrs.id || result.attrs.id || Date.now().toString();
+                
+                // Parse timestamp from delay element or use current time
+                let timestamp = new Date();
+                if (delay && delay.attrs.stamp) {
+                  timestamp = new Date(delay.attrs.stamp);
+                }
+                
+                const archivedMessage: Message = {
+                  id,
+                  from,
+                  to,
+                  body,
+                  timestamp,
+                  type: type as 'chat' | 'groupchat',
+                  status: 'delivered'
+                };
+                
+                const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+                
+                set((state) => {
+                  const existingMessages = state.messages[chatJid] || [];
+                  // Only add if message doesn't already exist
+                  const messageExists = existingMessages.find(msg => msg.id === id);
+                  if (!messageExists) {
+                    return {
+                      messages: {
+                        ...state.messages,
+                        [chatJid]: [...existingMessages, archivedMessage].sort((a, b) => 
+                          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                        )
+                      }
+                    };
+                  }
+                  return state;
+                });
+                
+                return;
+              }
+            }
+          }
+        }
+
+        // Handle MAM query completion
+        if (stanza.is('iq') && stanza.attrs.type === 'result') {
+          const fin = stanza.getChild('fin', 'urn:xmpp:mam:2');
+          if (fin) {
+            console.log('MAM query completed');
+            return;
+          }
+        }
+
         // Handle roster (contact list) response
         if (stanza.is('iq') && stanza.attrs.type === 'result') {
           const query = stanza.getChild('query', 'jabber:iq:roster');
@@ -340,6 +406,14 @@ export const useXMPPStore = create<XMPPState>()(
             
             // Send initial presence
             xmppClient.send(xml('presence'));
+            
+            // Request MAM archive to retrieve all messages
+            const mamQuery = xml(
+              'iq',
+              { type: 'set', id: 'mam1' },
+              xml('query', { xmlns: 'urn:xmpp:mam:2' })
+            );
+            xmppClient.send(mamQuery);
             
             // Fetch roster (contact list)
             const rosterIq = xml(

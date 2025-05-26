@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
@@ -21,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { toast } from '@/hooks/use-toast';
 import { UserBrowser } from './UserBrowser';
 import { CreateRoomDialog } from './CreateRoomDialog';
@@ -30,6 +30,8 @@ export const Sidebar = () => {
     currentUser, 
     contacts, 
     rooms, 
+    messages,
+    activeChat,
     disconnect, 
     addContact, 
     createRoom, 
@@ -66,6 +68,15 @@ export const Sidebar = () => {
       case 'xa': return 'bg-gray-500';
       default: return 'bg-gray-300';
     }
+  };
+
+  // Function to count unread messages for a chat
+  const getUnreadCount = (chatJid: string) => {
+    const chatMessages = messages[chatJid] || [];
+    return chatMessages.filter(msg => 
+      msg.from !== currentUser && 
+      (!msg.status || msg.status !== 'read')
+    ).length;
   };
 
   const handleAddContact = () => {
@@ -202,24 +213,36 @@ export const Sidebar = () => {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="space-y-1 mt-1">
-                {filteredContacts.map((contact) => (
-                  <Card
-                    key={contact.jid}
-                    className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer"
-                    onClick={() => setActiveChat(contact.jid, 'chat')}
-                  >
-                    <CardContent className="p-3 flex items-center space-x-2">
-                      <div className="relative">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{contact.name}</p>
-                        <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {filteredContacts.map((contact) => {
+                  const unreadCount = getUnreadCount(contact.jid);
+                  const isActive = activeChat === contact.jid;
+                  
+                  return (
+                    <Card
+                      key={contact.jid}
+                      className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
+                        isActive ? 'bg-blue-50 border-blue-200' : ''
+                      }`}
+                      onClick={() => setActiveChat(contact.jid, 'chat')}
+                    >
+                      <CardContent className="p-3 flex items-center space-x-2">
+                        <div className="relative">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{contact.name}</p>
+                          <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
+                        </div>
+                        {unreadCount > 0 && (
+                          <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </Badge>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -232,69 +255,81 @@ export const Sidebar = () => {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="space-y-1 mt-1">
-                {filteredRooms.map((room) => (
-                  <Card
-                    key={room.jid}
-                    className="bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer"
-                    onClick={() => setActiveChat(room.jid, 'groupchat')}
-                  >
-                    <CardContent className="p-3 flex items-center space-x-2">
-                      <div className="flex items-center space-x-1">
-                        <Hash className="w-4 h-4 text-gray-500" />
-                        {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{room.name}</p>
-                        <p className="text-xs text-gray-500">{room.participants.length} participants</p>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInviteToRoom(room.jid, room.name);
-                          }}
-                          className="h-6 w-6 p-0 hover:bg-blue-100"
-                        >
-                          <UserPlus className="h-3 w-3 text-blue-500" />
-                        </Button>
-                        {room.isOwner && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-6 w-6 p-0 hover:bg-red-100"
-                              >
-                                <Trash2 className="h-3 w-3 text-red-500" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Room</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete "{room.name}"? This action cannot be undone.
-                                  {room.isPermanent && " This is a permanent room and will be completely removed from the server."}
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => handleDeleteRoom(room.jid, room.name)}
-                                  className="bg-red-600 hover:bg-red-700"
+                {filteredRooms.map((room) => {
+                  const unreadCount = getUnreadCount(room.jid);
+                  const isActive = activeChat === room.jid;
+                  
+                  return (
+                    <Card
+                      key={room.jid}
+                      className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
+                        isActive ? 'bg-blue-50 border-blue-200' : ''
+                      }`}
+                      onClick={() => setActiveChat(room.jid, 'groupchat')}
+                    >
+                      <CardContent className="p-3 flex items-center space-x-2">
+                        <div className="flex items-center space-x-1">
+                          <Hash className="w-4 h-4 text-gray-500" />
+                          {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{room.name}</p>
+                          <p className="text-xs text-gray-500">{room.participants.length} participants</p>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          {unreadCount > 0 && (
+                            <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 mr-1">
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                            </Badge>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInviteToRoom(room.jid, room.name);
+                            }}
+                            className="h-6 w-6 p-0 hover:bg-blue-100"
+                          >
+                            <UserPlus className="h-3 w-3 text-blue-500" />
+                          </Button>
+                          {room.isOwner && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-6 w-6 p-0 hover:bg-red-100"
                                 >
-                                  Delete Room
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                                  <Trash2 className="h-3 w-3 text-red-500" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Room</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete "{room.name}"? This action cannot be undone.
+                                    {room.isPermanent && " This is a permanent room and will be completely removed from the server."}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleDeleteRoom(room.jid, room.name)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete Room
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </CollapsibleContent>
           </Collapsible>
