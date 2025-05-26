@@ -1,13 +1,18 @@
 
 import React from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/AppSidebar';
 import { ChatArea } from '@/components/ChatArea';
 
 export const ChatInterface = () => {
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <Sidebar />
-      <ChatArea />
-    </div>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-gray-50">
+        <AppSidebar />
+        <SidebarInset>
+          <ChatArea />
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 };
