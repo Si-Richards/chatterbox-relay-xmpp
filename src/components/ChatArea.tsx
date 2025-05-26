@@ -179,6 +179,7 @@ export const ChatArea = () => {
                   key={`${message.id}-${message.timestamp}`} 
                   message={message} 
                   isOwnMessage={message.from === currentUser}
+                  chatJid={activeChat}
                 />
               ))}
             </div>
@@ -212,11 +213,11 @@ export const ChatArea = () => {
   );
 };
 
-const MessageBubble = ({ message, isOwnMessage }: { message: Message; isOwnMessage: boolean }) => {
+const MessageBubble = ({ message, isOwnMessage, chatJid }: { message: Message; isOwnMessage: boolean; chatJid: string }) => {
   const { deleteMessage } = useXMPPStore();
 
   const handleDeleteMessage = () => {
-    deleteMessage(message.id);
+    deleteMessage(chatJid, message.id);
     toast({
       title: "Message Deleted",
       description: "Message has been removed"
