@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,12 @@ export const ChatArea = () => {
   };
 
   const getMessages = () => {
-    return messages[activeChat] || [];
+    const chatMessages = messages[activeChat] || [];
+    // Ensure all messages have proper timestamp format
+    return chatMessages.map(msg => ({
+      ...msg,
+      timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : msg.timestamp.getTime()
+    }));
   };
 
   const handleSendMessage = () => {

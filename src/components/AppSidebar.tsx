@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
@@ -66,7 +65,7 @@ export const AppSidebar = () => {
     if (activeChat) {
       const chatMessages = messages[activeChat] || [];
       const lastMessageTime = chatMessages.length > 0 ? 
-        Math.max(...chatMessages.map(msg => msg.timestamp)) : Date.now();
+        Math.max(...chatMessages.map(msg => typeof msg.timestamp === 'number' ? msg.timestamp : msg.timestamp.getTime())) : Date.now();
       
       setLastReadMessages(prev => ({
         ...prev,
@@ -78,7 +77,10 @@ export const AppSidebar = () => {
   const getUnreadCount = (chatJid: string) => {
     const chatMessages = messages[chatJid] || [];
     const lastRead = lastReadMessages[chatJid] || 0;
-    return chatMessages.filter(msg => msg.timestamp > lastRead && msg.from !== currentUser).length;
+    return chatMessages.filter(msg => {
+      const msgTime = typeof msg.timestamp === 'number' ? msg.timestamp : msg.timestamp.getTime();
+      return msgTime > lastRead && msg.from !== currentUser;
+    }).length;
   };
 
   const filteredContacts = contacts.filter(contact =>
