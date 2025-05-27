@@ -44,14 +44,21 @@ interface Room {
   jid: string;
   name: string;
   description?: string;
-  participants: string[];
-  isOwner?: boolean;
-  isPermanent?: boolean;
-  affiliations?: RoomAffiliation[];
   avatar?: string;
+  isPermanent: boolean;
+  isOwner: boolean;
+  affiliations?: RoomAffiliation[];
+  lastMessageTime?: number;
+  // Add privacy and password settings
+  isPrivate?: boolean;
+  isPasswordProtected?: boolean;
+  membersOnly?: boolean;
+  membersByDefault?: boolean;
+  publicList?: boolean;
+  public?: boolean;
 }
 
-interface XMPPState {
+interface XMPPStore {
   client: any;
   isConnected: boolean;
   currentUser: string;
@@ -72,7 +79,7 @@ interface XMPPState {
   sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
-  createRoom: (roomName: string, description?: string, isPermanent?: boolean) => void;
+  createRoom: (roomName: string, description?: string, isPermanent?: boolean, isPrivate?: boolean, password?: string) => void;
   updateRoomDescription: (roomJid: string, description: string) => void;
   deleteRoom: (roomJid: string) => void;
   joinRoom: (roomJid: string) => void;
@@ -92,9 +99,20 @@ interface XMPPState {
   fetchRoomVCard: (roomJid: string) => void;
   setContactSortMethod: (method: 'newest' | 'alphabetical') => void;
   setRoomSortMethod: (method: 'newest' | 'alphabetical') => void;
+  configureRoom: (roomJid: string, config: RoomConfiguration) => void;
 }
 
-export const useXMPPStore = create<XMPPState>()(
+interface RoomConfiguration {
+  membersOnly?: boolean;
+  membersByDefault?: boolean;
+  publicList?: boolean;
+  public?: boolean;
+  passwordProtected?: boolean;
+  password?: string;
+  permanent?: boolean;
+}
+
+export const useXMPPStore = create<XMPPStore>()(
   persist(
     (set, get) => ({
       client: null,
@@ -672,58 +690,56 @@ export const useXMPPStore = create<XMPPState>()(
         }));
       },
       
-      createRoom: (roomName: string, description?: string, isPermanent: boolean = false) => {
-        const { client, currentUser } = get();
-        if (!client) return;
+      createRoom: (roomName: string, description?: string, isPermanent?: boolean, isPrivate?: boolean, password?: string) => {
+        const client = get().client;
+        if (!client || !get().isConnected) return;
 
-        const roomJid = `${roomName}@conference.ejabberd.voicehost.io`;
-        const nickname = currentUser.split('@')[0];
+        const domain = get().currentUser?.split('@')[1];
+        const roomJid = `${roomName}@conference.${domain}`;
         
-        // Join the room first
-        const presence = xml('presence', { to: `${roomJid}/${nickname}` });
+        console.log('Creating room:', roomJid, { description, isPermanent, isPrivate, password });
+
+        // Join room to create it
+        const presence = xml('presence', { to: `${roomJid}/${get().currentUser?.split('@')[0]}` },
+          xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+        );
+        
         client.send(presence);
 
-        // If it's a permanent room, configure it
-        if (isPermanent) {
-          setTimeout(() => {
-            const configForm = xml(
-              'iq',
-              { type: 'set', to: roomJid, id: `config-${Date.now()}` },
-              xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' },
-                xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-                  xml('field', { var: 'FORM_TYPE' },
-                    xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
-                  ),
-                  xml('field', { var: 'muc#roomconfig_persistentroom' },
-                    xml('value', {}, '1')
-                  ),
-                  xml('field', { var: 'muc#roomconfig_publicroom' },
-                    xml('value', {}, '1')
-                  )
-                )
-              )
-            );
-            client.send(configForm);
-          }, 1000);
-        }
+        // Add room to store immediately
+        const newRoom: Room = {
+          jid: roomJid,
+          name: roomName,
+          description: description || '',
+          isPermanent: isPermanent || false,
+          isOwner: true,
+          lastMessageTime: Date.now(),
+          isPrivate: isPrivate || false,
+          isPasswordProtected: !!password,
+          membersOnly: isPrivate || false,
+          membersByDefault: false,
+          publicList: !isPrivate,
+          public: !isPrivate
+        };
 
-        set((state) => ({
-          rooms: [...state.rooms, { 
-            jid: roomJid, 
-            name: roomName,
-            description: description || '',
-            participants: [],
-            isOwner: true,
-            isPermanent,
-            affiliations: [],
-            avatar: null
-          }]
+        set(state => ({
+          rooms: [...state.rooms, newRoom]
         }));
 
-        // Fetch room VCard
-        setTimeout(() => {
-          get().fetchRoomVCard(roomJid);
-        }, 2000);
+        // Configure room if needed
+        if (isPermanent || isPrivate || password) {
+          setTimeout(() => {
+            get().configureRoom(roomJid, {
+              permanent: isPermanent,
+              membersOnly: isPrivate,
+              membersByDefault: false,
+              publicList: !isPrivate,
+              public: !isPrivate,
+              passwordProtected: !!password,
+              password: password
+            });
+          }, 1000);
+        }
       },
 
       updateRoomDescription: (roomJid: string, description: string) => {
@@ -1257,6 +1273,77 @@ export const useXMPPStore = create<XMPPState>()(
             ...state.messages,
             [roomJid]: [...(state.messages[roomJid] || []), systemMessage]
           }
+        }));
+      },
+
+      configureRoom: (roomJid: string, config: RoomConfiguration) => {
+        const client = get().client;
+        if (!client || !get().isConnected) return;
+
+        console.log('Configuring room:', roomJid, config);
+
+        // Request room configuration form
+        const configRequest = xml('iq', { 
+          type: 'get', 
+          to: roomJid,
+          id: `config_${Date.now()}`
+        },
+          xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' })
+        );
+
+        client.send(configRequest);
+
+        // Send configuration
+        const configForm = xml('iq', {
+          type: 'set',
+          to: roomJid,
+          id: `config_set_${Date.now()}`
+        },
+          xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' },
+            xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+              xml('field', { var: 'FORM_TYPE' },
+                xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
+              ),
+              config.permanent !== undefined && xml('field', { var: 'muc#roomconfig_persistentroom' },
+                xml('value', {}, config.permanent ? '1' : '0')
+              ),
+              config.membersOnly !== undefined && xml('field', { var: 'muc#roomconfig_membersonly' },
+                xml('value', {}, config.membersOnly ? '1' : '0')
+              ),
+              config.membersByDefault !== undefined && xml('field', { var: 'muc#roomconfig_memberbydefault' },
+                xml('value', {}, config.membersByDefault ? '1' : '0')
+              ),
+              config.publicList !== undefined && xml('field', { var: 'muc#roomconfig_publicroom' },
+                xml('value', {}, config.publicList ? '1' : '0')
+              ),
+              config.passwordProtected !== undefined && xml('field', { var: 'muc#roomconfig_passwordprotectedroom' },
+                xml('value', {}, config.passwordProtected ? '1' : '0')
+              ),
+              config.password && xml('field', { var: 'muc#roomconfig_roomsecret' },
+                xml('value', {}, config.password)
+              )
+            )
+          )
+        );
+
+        client.send(configForm);
+
+        // Update room in store
+        set(state => ({
+          rooms: state.rooms.map(room => 
+            room.jid === roomJid 
+              ? {
+                  ...room,
+                  isPermanent: config.permanent ?? room.isPermanent,
+                  isPrivate: config.membersOnly ?? room.isPrivate,
+                  isPasswordProtected: config.passwordProtected ?? room.isPasswordProtected,
+                  membersOnly: config.membersOnly ?? room.membersOnly,
+                  membersByDefault: config.membersByDefault ?? room.membersByDefault,
+                  publicList: config.publicList ?? room.publicList,
+                  public: config.public ?? room.public
+                }
+              : room
+          )
         }));
       },
 

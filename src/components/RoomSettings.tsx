@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -48,7 +47,8 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     deleteRoom, 
     fetchRoomAffiliations, 
     setRoomAffiliation,
-    fetchServerUsers
+    fetchServerUsers,
+    configureRoom
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
@@ -82,6 +82,23 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     toast({
       title: "Affiliation Updated",
       description: `User affiliation has been set to ${selectedAffiliation}`
+    });
+  };
+
+  const handleTogglePrivacy = () => {
+    if (!room || !isOwner) return;
+    
+    const newPrivacy = !room.isPrivate;
+    configureRoom(roomJid, {
+      membersOnly: newPrivacy,
+      membersByDefault: false,
+      publicList: !newPrivacy,
+      public: !newPrivacy
+    });
+    
+    toast({
+      title: "Room Privacy Updated",
+      description: `Room is now ${newPrivacy ? 'private (members only)' : 'public'}`
     });
   };
 
@@ -160,12 +177,75 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Type</Label>
-                  <p className="text-sm text-gray-600">
-                    {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm text-gray-600">
+                      {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
+                    </p>
+                    {room.isPrivate && (
+                      <Badge variant="secondary" className="text-xs">
+                        Private
+                      </Badge>
+                    )}
+                    {room.isPasswordProtected && (
+                      <Badge variant="destructive" className="text-xs">
+                        Password Protected
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Room Privacy Settings */}
+            {isOwner && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Privacy Settings</CardTitle>
+                  <CardDescription>
+                    Control who can access this room
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Private Room</Label>
+                      <p className="text-xs text-gray-500">
+                        {room.isPrivate 
+                          ? "Only invited members can join this room"
+                          : "Anyone can discover and join this room"
+                        }
+                      </p>
+                    </div>
+                    <Button
+                      variant={room.isPrivate ? "default" : "outline"}
+                      size="sm"
+                      onClick={handleTogglePrivacy}
+                    >
+                      {room.isPrivate ? "Make Public" : "Make Private"}
+                    </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <Label className="text-xs text-gray-500">Members Only</Label>
+                      <p className="text-xs">{room.membersOnly ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Public List</Label>
+                      <p className="text-xs">{room.publicList ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Password Protected</Label>
+                      <p className="text-xs">{room.isPasswordProtected ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Permanent</Label>
+                      <p className="text-xs">{room.isPermanent ? "Yes" : "No"}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Room Affiliations */}
             {isOwner && (
