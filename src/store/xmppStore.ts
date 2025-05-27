@@ -158,17 +158,17 @@ export const useXMPPStore = create<XMPPState>()(
                   status: 'delivered'
                 };
                 
-                const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+                const mamChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
                 
                 set((state) => {
-                  const existingMessages = state.messages[chatJid] || [];
+                  const existingMessages = state.messages[mamChatJid] || [];
                   // Only add if message doesn't already exist
                   const messageExists = existingMessages.find(msg => msg.id === id);
                   if (!messageExists) {
                     return {
                       messages: {
                         ...state.messages,
-                        [chatJid]: [...existingMessages, archivedMessage].sort((a, b) => 
+                        [mamChatJid]: [...existingMessages, archivedMessage].sort((a, b) => 
                           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                         )
                       }
@@ -311,7 +311,7 @@ export const useXMPPStore = create<XMPPState>()(
           const gone = stanza.getChild('gone', 'http://jabber.org/protocol/chatstates');
           
           if (composing || paused) {
-            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const userJid = type === 'groupchat' ? from : from.split('/')[0];
             const state = composing ? 'composing' : 'paused';
             
@@ -322,15 +322,15 @@ export const useXMPPStore = create<XMPPState>()(
               : from.split('/')[0] === currentUser;
             
             if (!isCurrentUser) {
-              get().setChatState(chatJid, userJid, state);
+              get().setChatState(stateChatJid, userJid, state);
             }
             return;
           }
           
           if (active || inactive || gone) {
-            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const userJid = type === 'groupchat' ? from : from.split('/')[0];
-            get().clearTypingState(chatJid, userJid);
+            get().clearTypingState(stateChatJid, userJid);
             return;
           }
 
@@ -373,9 +373,9 @@ export const useXMPPStore = create<XMPPState>()(
           // Handle incoming message with body
           if (body) {
             // Clear typing state when message is received
-            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const messageChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const userJid = type === 'groupchat' ? from : from.split('/')[0];
-            get().clearTypingState(chatJid, userJid);
+            get().clearTypingState(messageChatJid, userJid);
             
             // Send receipt for received message
             const { client } = get();
@@ -418,7 +418,7 @@ export const useXMPPStore = create<XMPPState>()(
               ? from.includes(currentUser.split('@')[0])
               : from.split('/')[0] === currentUser;
             
-            if (!isOwnMessage && chatJid !== activeChat) {
+            if (!isOwnMessage && messageChatJid !== activeChat) {
               const senderName = type === 'groupchat'
                 ? from.split('/')[1] || from.split('@')[0]
                 : from.split('@')[0];
@@ -428,7 +428,7 @@ export const useXMPPStore = create<XMPPState>()(
                 description: `${senderName}: ${body.length > 50 ? body.substring(0, 50) + '...' : body}`,
                 duration: 4000,
                 onClick: () => {
-                  get().setActiveChat(chatJid, type as 'chat' | 'groupchat');
+                  get().setActiveChat(messageChatJid, type as 'chat' | 'groupchat');
                 }
               });
             }
@@ -436,7 +436,7 @@ export const useXMPPStore = create<XMPPState>()(
             set((state) => ({
               messages: {
                 ...state.messages,
-                [chatJid]: [...(state.messages[chatJid] || []), message]
+                [messageChatJid]: [...(state.messages[messageChatJid] || []), message]
               }
             }));
           }
@@ -607,8 +607,8 @@ export const useXMPPStore = create<XMPPState>()(
         client.send(message);
 
         // Clear typing state for current user
-        const chatJid = type === 'groupchat' ? to : to.split('/')[0];
-        get().setCurrentUserTyping(chatJid, false);
+        const sendChatJid = type === 'groupchat' ? to : to.split('/')[0];
+        get().setCurrentUserTyping(sendChatJid, false);
 
         // Add to local messages
         const newMessage: Message = {
@@ -621,12 +621,10 @@ export const useXMPPStore = create<XMPPState>()(
           status: 'sent'
         };
 
-        const chatJid = type === 'groupchat' ? to : to.split('/')[0];
-        
         set((state) => ({
           messages: {
             ...state.messages,
-            [chatJid]: [...(state.messages[chatJid] || []), newMessage]
+            [sendChatJid]: [...(state.messages[sendChatJid] || []), newMessage]
           }
         }));
       },
@@ -666,12 +664,12 @@ export const useXMPPStore = create<XMPPState>()(
           fileData
         };
 
-        const chatJid = type === 'groupchat' ? to : to.split('/')[0];
+        const fileChatJid = type === 'groupchat' ? to : to.split('/')[0];
         
         set((state) => ({
           messages: {
             ...state.messages,
-            [chatJid]: [...(state.messages[chatJid] || []), newMessage]
+            [fileChatJid]: [...(state.messages[fileChatJid] || []), newMessage]
           }
         }));
       },
