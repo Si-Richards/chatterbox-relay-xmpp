@@ -14,10 +14,13 @@ export const useTyping = ({ chatJid, chatType }: UseTypingOptions) => {
   const isComposingRef = useRef(false);
 
   const startTyping = useCallback(() => {
+    console.log('startTyping called:', { chatJid, chatType, isComposing: isComposingRef.current });
+    
     if (!isComposingRef.current) {
       isComposingRef.current = true;
       setCurrentUserTyping(chatJid, true);
       sendChatState(chatJid, 'composing', chatType);
+      console.log('Sent composing state');
     }
 
     // Clear existing timeouts
@@ -30,6 +33,7 @@ export const useTyping = ({ chatJid, chatType }: UseTypingOptions) => {
 
     // Set paused timeout for 3 seconds of inactivity
     pausedTimeoutRef.current = setTimeout(() => {
+      console.log('Paused timeout triggered');
       if (isComposingRef.current) {
         isComposingRef.current = false;
         setCurrentUserTyping(chatJid, false);
@@ -39,10 +43,13 @@ export const useTyping = ({ chatJid, chatType }: UseTypingOptions) => {
   }, [chatJid, chatType, sendChatState, setCurrentUserTyping]);
 
   const stopTyping = useCallback(() => {
+    console.log('stopTyping called:', { chatJid, chatType, isComposing: isComposingRef.current });
+    
     if (isComposingRef.current) {
       isComposingRef.current = false;
       setCurrentUserTyping(chatJid, false);
       sendChatState(chatJid, 'active', chatType);
+      console.log('Sent active state');
     }
 
     // Clear timeouts
@@ -59,6 +66,7 @@ export const useTyping = ({ chatJid, chatType }: UseTypingOptions) => {
   // Cleanup on unmount or chat change
   useEffect(() => {
     return () => {
+      console.log('useTyping cleanup');
       if (composingTimeoutRef.current) {
         clearTimeout(composingTimeoutRef.current);
       }

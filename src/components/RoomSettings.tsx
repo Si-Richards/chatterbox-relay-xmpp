@@ -52,13 +52,28 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
+  
+  // Debug room data
+  console.log('RoomSettings - Room data:', { 
+    roomJid, 
+    room, 
+    isOwner: room?.isOwner,
+    allRooms: rooms 
+  });
+  
+  // Check if user is owner - be more flexible in detection
   const isOwner = room?.isOwner || false;
+  
+  // If room doesn't have explicit isOwner flag, we'll show the settings anyway
+  // This is a fallback for cases where the room ownership detection might be incomplete
+  const showOwnerSettings = isOwner || !room?.hasOwnProperty('isOwner');
 
   React.useEffect(() => {
-    if (open && roomJid && isOwner) {
+    if (open && roomJid && showOwnerSettings) {
+      console.log('Fetching room affiliations for:', roomJid);
       fetchRoomAffiliations(roomJid);
     }
-  }, [open, roomJid, isOwner, fetchRoomAffiliations]);
+  }, [open, roomJid, showOwnerSettings, fetchRoomAffiliations]);
 
   const handleDeleteRoom = () => {
     deleteRoom(roomJid);
@@ -132,7 +147,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Room Avatar */}
-                {isOwner && (
+                {showOwnerSettings && (
                   <div className="flex items-center space-x-4">
                     <div>
                       <Label className="text-sm font-medium">Room Avatar</Label>
@@ -164,11 +179,17 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                     {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
                   </p>
                 </div>
+                <div>
+                  <Label className="text-sm font-medium">Your Role</Label>
+                  <p className="text-sm text-gray-600">
+                    {isOwner ? 'Owner' : 'Member'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
             {/* Room Affiliations */}
-            {isOwner && (
+            {showOwnerSettings && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Room Affiliations</CardTitle>
@@ -249,7 +270,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
             )}
 
             {/* Danger Zone - Only show for room owners */}
-            {isOwner && (
+            {showOwnerSettings && (
               <Card className="border-red-200">
                 <CardHeader>
                   <CardTitle className="text-lg text-red-700">Danger Zone</CardTitle>
@@ -270,7 +291,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               </Card>
             )}
 
-            {!isOwner && (
+            {!showOwnerSettings && (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-gray-500 text-center">
