@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
@@ -70,11 +71,39 @@ export const Sidebar = () => {
     }
   };
 
+  const getPresenceText = (contact: any) => {
+    if (contact.presence === 'online') {
+      return 'Online';
+    } else if (contact.lastSeen) {
+      const lastSeenDate = new Date(contact.lastSeen);
+      const now = new Date();
+      const diffMs = now.getTime() - lastSeenDate.getTime();
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffMins < 1) {
+        return 'Just now';
+      } else if (diffMins < 60) {
+        return `${diffMins}m ago`;
+      } else if (diffHours < 24) {
+        return `${diffHours}h ago`;
+      } else if (diffDays < 7) {
+        return `${diffDays}d ago`;
+      } else {
+        return lastSeenDate.toLocaleDateString();
+      }
+    } else {
+      return contact.presence ? contact.presence.charAt(0).toUpperCase() + contact.presence.slice(1) : 'Offline';
+    }
+  };
+
   // Function to count unread messages for a chat
   const getUnreadCount = (chatJid: string) => {
     const chatMessages = messages[chatJid] || [];
     return chatMessages.filter(msg => 
       msg.from !== currentUser && 
+      !msg.from.includes(currentUser.split('@')[0]) &&
       (!msg.status || msg.status !== 'read')
     ).length;
   };
@@ -119,6 +148,21 @@ export const Sidebar = () => {
     toast({
       title: "Invite Users",
       description: `Feature coming soon for room: ${roomName}`
+    });
+  };
+
+  const handleChatClick = (chatJid: string, type: 'chat' | 'groupchat') => {
+    setActiveChat(chatJid, type);
+    
+    // Show toast for new message click
+    const senderName = type === 'chat' 
+      ? contacts.find(c => c.jid === chatJid)?.name || chatJid.split('@')[0]
+      : rooms.find(r => r.jid === chatJid)?.name || chatJid.split('@')[0];
+    
+    toast({
+      title: "Opening Chat",
+      description: `Opening conversation with ${senderName}`,
+      duration: 2000
     });
   };
 
@@ -223,19 +267,19 @@ export const Sidebar = () => {
                       className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
                         isActive ? 'bg-blue-50 border-blue-200' : ''
                       }`}
-                      onClick={() => setActiveChat(contact.jid, 'chat')}
+                      onClick={() => handleChatClick(contact.jid, 'chat')}
                     >
                       <CardContent className="p-3 flex items-center space-x-2">
                         <div className="relative">
                           <User className="w-4 h-4 text-gray-500" />
                           <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{contact.name}</p>
-                          <p className="text-xs text-gray-500 capitalize">{contact.presence}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{contact.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{getPresenceText(contact)}</p>
                         </div>
                         {unreadCount > 0 && (
-                          <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5">
+                          <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
                             {unreadCount > 99 ? '99+' : unreadCount}
                           </Badge>
                         )}
@@ -265,18 +309,18 @@ export const Sidebar = () => {
                       className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
                         isActive ? 'bg-blue-50 border-blue-200' : ''
                       }`}
-                      onClick={() => setActiveChat(room.jid, 'groupchat')}
+                      onClick={() => handleChatClick(room.jid, 'groupchat')}
                     >
                       <CardContent className="p-3 flex items-center space-x-2">
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center space-x-1 flex-shrink-0">
                           <Hash className="w-4 h-4 text-gray-500" />
                           {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{room.name}</p>
-                          <p className="text-xs text-gray-500">{room.participants.length} participants</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{room.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{room.participants.length} participants</p>
                         </div>
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center space-x-1 flex-shrink-0">
                           {unreadCount > 0 && (
                             <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 mr-1">
                               {unreadCount > 99 ? '99+' : unreadCount}

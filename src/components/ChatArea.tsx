@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,14 +65,15 @@ export const ChatArea = () => {
     deleteMessage,
     addReaction,
     updateRoomDescription,
-    userAvatar
+    userAvatar,
+    setActiveChat
   } = useXMPPStore();
 
   // Fix duplicated messages by using a Set to track unique message IDs
   const currentMessages = activeChat ? 
     Array.from(new Map((messages[activeChat] || []).map(msg => [msg.id, msg])).values())
     : [];
-  
+
   const getChatName = () => {
     if (!activeChat) return '';
     
@@ -492,6 +492,7 @@ export const ChatArea = () => {
                         src={message.fileData.url} 
                         alt={message.fileData.name}
                         className="max-w-xs rounded"
+                        style={{ maxHeight: '300px', objectFit: 'contain' }}
                       />
                     ) : (
                       <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">

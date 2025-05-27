@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { client, xml } from '@xmpp/client';
+import { toast } from '@/hooks/use-toast';
 
 interface MessageReaction {
   emoji: string;
@@ -29,6 +30,7 @@ interface Contact {
   name: string;
   presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa';
   avatar?: string;
+  lastSeen?: Date;
 }
 
 interface RoomAffiliation {
@@ -176,7 +178,8 @@ export const useXMPPStore = create<XMPPState>()(
               jid: item.attrs.jid,
               name: item.attrs.name || item.attrs.jid.split('@')[0],
               presence: 'offline',
-              avatar: null
+              avatar: null,
+              lastSeen: new Date()
             }));
             
             set({ contacts });
@@ -289,18 +292,55 @@ export const useXMPPStore = create<XMPPState>()(
               );
               client.send(receipt);
             }
+
+            // Handle file data from XMPP message
+            let fileData = null;
+            const fileNode = stanza.getChild('file', 'urn:xmpp:file-transfer');
+            if (fileNode) {
+              fileData = {
+                name: fileNode.attrs.name || 'file',
+                type: fileNode.attrs.type || 'application/octet-stream',
+                size: parseInt(fileNode.attrs.size) || 0,
+                url: fileNode.attrs.url || ''
+              };
+            }
             
             const message: Message = {
               id,
               from,
               to,
               body,
-              timestamp: new Date(), // Always create new Date object
+              timestamp: new Date(),
               type: type as 'chat' | 'groupchat',
-              status: 'delivered'
+              status: 'delivered',
+              fileData
             };
             
             const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const { currentUser, activeChat } = get();
+            
+            // Show toast notification for new messages (except from current user)
+            const isOwnMessage = type === 'groupchat' 
+              ? from.includes(currentUser.split('@')[0])
+              : from.split('/')[0] === currentUser;
+            
+            if (!isOwnMessage && chatJid !== activeChat) {
+              const senderName = type === 'groupchat'
+                ? from.split('/')[1] || from.split('@')[0]
+                : from.split('@')[0];
+              
+              toast({
+                title: "New Message",
+                description: `${senderName}: ${body.length > 50 ? body.substring(0, 50) + '...' : body}`,
+                duration: 4000,
+                action: {
+                  altText: "Open chat",
+                  onClick: () => {
+                    get().setActiveChat(chatJid, type as 'chat' | 'groupchat');
+                  }
+                }
+              });
+            }
             
             set((state) => ({
               messages: {
@@ -371,7 +411,7 @@ export const useXMPPStore = create<XMPPState>()(
             set((state) => ({
               contacts: state.contacts.map(contact => 
                 contact.jid === from.split('/')[0] 
-                  ? { ...contact, presence: 'offline' }
+                  ? { ...contact, presence: 'offline', lastSeen: new Date() }
                   : contact
               )
             }));
@@ -587,7 +627,7 @@ export const useXMPPStore = create<XMPPState>()(
 
         // Add to contacts list
         set((state) => ({
-          contacts: [...state.contacts, { jid, name: jid.split('@')[0], presence: 'offline', avatar: null }]
+          contacts: [...state.contacts, { jid, name: jid.split('@')[0], presence: 'offline', avatar: null, lastSeen: new Date() }]
         }));
       },
       
@@ -839,10 +879,6 @@ export const useXMPPStore = create<XMPPState>()(
       setUserAvatar: (avatarUrl: string) => {
         const { client } = get();
         if (!client) return;
-        
-        // Update vCard with avatar (XEP-0153)
-        // This is a simplified implementation - ideally, you'd convert the image to base64
-        // and update the actual vCard XML, but for this example we'll just store the URL
         
         // Store avatar URL in local state
         set({ userAvatar: avatarUrl });
@@ -1125,6 +1161,14 @@ export const useXMPPStore = create<XMPPState>()(
             ])
           );
           state.messages = messagesWithDates;
+        }
+        
+        if (state?.contacts) {
+          // Convert lastSeen strings back to Date objects
+          state.contacts = state.contacts.map(contact => ({
+            ...contact,
+            lastSeen: contact.lastSeen ? new Date(contact.lastSeen) : undefined
+          }));
         }
       }
     }
