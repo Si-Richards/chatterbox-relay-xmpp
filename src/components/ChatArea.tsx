@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -206,9 +205,7 @@ export const ChatArea = () => {
 
   const isFromCurrentUser = (fromJid: string) => {
     if (activeChatType === 'groupchat') {
-      // Ensure fromJid is a string before calling split
-      const jidString = String(fromJid);
-      return jidString.includes(currentUser.split('@')[0]);
+      return fromJid.includes(currentUser.split('@')[0]);
     }
     return fromJid === currentUser;
   };
@@ -468,22 +465,10 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
-          // Ensure proper type safety for message.from
-          const messageFromRaw = message.from;
-          const messageFrom = typeof messageFromRaw === 'string' ? messageFromRaw : String(messageFromRaw || '');
-          const isOwn = isFromCurrentUser(messageFrom);
-          
-          // Calculate sender name with proper type safety
-          let senderName = 'Unknown';
-          if (messageFrom && typeof messageFrom === 'string') {
-            if (activeChatType === 'groupchat') {
-              const roomNick = messageFrom.includes('/') ? messageFrom.split('/')[1] : '';
-              const userPart = messageFrom.includes('@') ? messageFrom.split('@')[0] : '';
-              senderName = roomNick || userPart || 'Unknown';
-            } else {
-              senderName = messageFrom.includes('@') ? messageFrom.split('@')[0] : messageFrom || 'Unknown';
-            }
-          }
+          const isOwn = isFromCurrentUser(message.from);
+          const senderName = activeChatType === 'groupchat' 
+            ? message.from.split('/')[1] || message.from.split('@')[0]
+            : message.from.split('@')[0];
 
           const messageContent = (
             <div className="flex items-start space-x-2">
@@ -561,7 +546,7 @@ export const ChatArea = () => {
               {!isOwn && (
                 <div className="mr-2 flex-shrink-0">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={getContactAvatar(messageFrom.split('/')[0])} />
+                    <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
                     <AvatarFallback>
                       <User className="h-4 w-4" />
                     </AvatarFallback>

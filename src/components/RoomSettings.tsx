@@ -22,8 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2, Crown, Shield, User, UserMinus, Lock, Eye, EyeOff, Settings } from 'lucide-react';
+import { Trash2, Crown, Shield, User, UserMinus } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 import { RoomAvatarSelector } from './RoomAvatarSelector';
@@ -42,15 +41,14 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedAffiliation, setSelectedAffiliation] = useState<'owner' | 'admin' | 'member' | 'none'>('member');
-  const [newPassword, setNewPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   
   const { 
     rooms, 
     deleteRoom, 
     fetchRoomAffiliations, 
     setRoomAffiliation,
-    updateRoomSettings
+    fetchServerUsers,
+    configureRoom
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
@@ -87,57 +85,20 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     });
   };
 
-  const handlePrivacyToggle = (isPrivate: boolean) => {
-    const settings = {
-      members_only: isPrivate,
-      members_by_default: false,
-      public_list: !isPrivate,
-      public: !isPrivate
-    };
+  const handleTogglePrivacy = () => {
+    if (!room || !isOwner) return;
     
-    updateRoomSettings(roomJid, settings);
-    
-    toast({
-      title: "Privacy Updated",
-      description: `Room is now ${isPrivate ? 'private' : 'public'}`
+    const newPrivacy = !room.isPrivate;
+    configureRoom(roomJid, {
+      membersOnly: newPrivacy,
+      membersByDefault: false,
+      publicList: !newPrivacy,
+      public: !newPrivacy
     });
-  };
-
-  const handlePasswordUpdate = () => {
-    if (!newPassword.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a password",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const settings = {
-      password_protected: true,
-      password: newPassword.trim()
-    };
-    
-    updateRoomSettings(roomJid, settings);
-    setNewPassword('');
     
     toast({
-      title: "Password Updated",
-      description: "Room password has been updated"
-    });
-  };
-
-  const handleRemovePassword = () => {
-    const settings = {
-      password_protected: false,
-      password: undefined
-    };
-    
-    updateRoomSettings(roomJid, settings);
-    
-    toast({
-      title: "Password Removed",
-      description: "Room password protection has been disabled"
+      title: "Room Privacy Updated",
+      description: `Room is now ${newPrivacy ? 'private (members only)' : 'public'}`
     });
   };
 
@@ -214,106 +175,72 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                   <Label className="text-sm font-medium">Description</Label>
                   <p className="text-sm text-gray-600">{room.description || 'No description'}</p>
                 </div>
-                <div className="flex space-x-4">
-                  <div>
-                    <Label className="text-sm font-medium">Type</Label>
+                <div>
+                  <Label className="text-sm font-medium">Type</Label>
+                  <div className="flex items-center space-x-2">
                     <p className="text-sm text-gray-600">
                       {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
                     </p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Privacy</Label>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={room.isPrivate ? "destructive" : "secondary"}>
-                        {room.isPrivate ? 'Private' : 'Public'}
+                    {room.isPrivate && (
+                      <Badge variant="secondary" className="text-xs">
+                        Private
                       </Badge>
-                      {room.hasPassword && (
-                        <Badge variant="outline">
-                          <Lock className="w-3 h-3 mr-1" />
-                          Password Protected
-                        </Badge>
-                      )}
-                    </div>
+                    )}
+                    {room.isPasswordProtected && (
+                      <Badge variant="destructive" className="text-xs">
+                        Password Protected
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Privacy Settings */}
+            {/* Room Privacy Settings */}
             {isOwner && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center space-x-2">
-                    <Settings className="w-5 h-5" />
-                    <span>Privacy & Access</span>
-                  </CardTitle>
+                  <CardTitle className="text-lg">Privacy Settings</CardTitle>
                   <CardDescription>
-                    Control who can access this room and how
+                    Control who can access this room
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Privacy Toggle */}
                   <div className="flex items-center justify-between">
-                    <div className="space-y-1">
+                    <div>
                       <Label className="text-sm font-medium">Private Room</Label>
                       <p className="text-xs text-gray-500">
-                        Only members can join and the room won't appear in public listings
+                        {room.isPrivate 
+                          ? "Only invited members can join this room"
+                          : "Anyone can discover and join this room"
+                        }
                       </p>
                     </div>
-                    <Checkbox
-                      checked={room.isPrivate || false}
-                      onCheckedChange={handlePrivacyToggle}
-                    />
+                    <Button
+                      variant={room.isPrivate ? "default" : "outline"}
+                      size="sm"
+                      onClick={handleTogglePrivacy}
+                    >
+                      {room.isPrivate ? "Make Public" : "Make Private"}
+                    </Button>
                   </div>
-
-                  {/* Password Protection */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <Label className="text-sm font-medium">Password Protection</Label>
-                        <p className="text-xs text-gray-500">
-                          Require a password to join this room
-                        </p>
-                      </div>
-                      {room.hasPassword && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRemovePassword}
-                        >
-                          Remove Password
-                        </Button>
-                      )}
+                  
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <Label className="text-xs text-gray-500">Members Only</Label>
+                      <p className="text-xs">{room.membersOnly ? "Yes" : "No"}</p>
                     </div>
-
-                    <div className="flex space-x-2">
-                      <div className="relative flex-1">
-                        <Input
-                          placeholder={room.hasPassword ? "Update password" : "Set room password"}
-                          type={showPassword ? "text" : "password"}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                      <Button
-                        onClick={handlePasswordUpdate}
-                        disabled={!newPassword.trim()}
-                      >
-                        {room.hasPassword ? 'Update' : 'Set Password'}
-                      </Button>
+                    <div>
+                      <Label className="text-xs text-gray-500">Public List</Label>
+                      <p className="text-xs">{room.publicList ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Password Protected</Label>
+                      <p className="text-xs">{room.isPasswordProtected ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Permanent</Label>
+                      <p className="text-xs">{room.isPermanent ? "Yes" : "No"}</p>
                     </div>
                   </div>
                 </CardContent>
