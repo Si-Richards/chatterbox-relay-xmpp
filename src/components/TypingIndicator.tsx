@@ -22,12 +22,18 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
 
   const getDisplayName = (userJid: string) => {
     if (chatType === 'groupchat') {
-      // For group chats, extract nickname from full JID
-      return userJid.split('/')[1] || userJid.split('@')[0];
+      // For group chats, extract nickname from full JID (room@domain/nickname)
+      const nickname = userJid.split('/')[1];
+      if (nickname) {
+        return nickname;
+      }
+      // Fallback to username if no nickname
+      return userJid.split('@')[0];
     } else {
-      // For direct chats, find contact name
-      const contact = contacts.find(c => c.jid === userJid);
-      return contact?.name || userJid.split('@')[0];
+      // For direct chats, find contact name or use username
+      const contactJid = userJid.split('/')[0]; // Remove resource if present
+      const contact = contacts.find(c => c.jid === contactJid);
+      return contact?.name || contactJid.split('@')[0];
     }
   };
 

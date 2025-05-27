@@ -158,17 +158,17 @@ export const useXMPPStore = create<XMPPState>()(
                   status: 'delivered'
                 };
                 
-                const mamChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+                const archiveChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
                 
                 set((state) => {
-                  const existingMessages = state.messages[mamChatJid] || [];
+                  const existingMessages = state.messages[archiveChatJid] || [];
                   // Only add if message doesn't already exist
                   const messageExists = existingMessages.find(msg => msg.id === id);
                   if (!messageExists) {
                     return {
                       messages: {
                         ...state.messages,
-                        [mamChatJid]: [...existingMessages, archivedMessage].sort((a, b) => 
+                        [archiveChatJid]: [...existingMessages, archivedMessage].sort((a, b) => 
                           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                         )
                       }
@@ -311,14 +311,16 @@ export const useXMPPStore = create<XMPPState>()(
           const gone = stanza.getChild('gone', 'http://jabber.org/protocol/chatstates');
           
           if (composing || paused) {
+            // For MUC rooms: chatJid is room JID, userJid is full JID with nickname
+            // For direct chat: chatJid is user JID, userJid is user JID
             const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-            const userJid = type === 'groupchat' ? from : from.split('/')[0];
+            const userJid = from; // Keep full JID to preserve nickname for MUC
             const state = composing ? 'composing' : 'paused';
             
             // Don't show typing for current user
             const { currentUser } = get();
             const isCurrentUser = type === 'groupchat' 
-              ? from.includes(currentUser.split('@')[0])
+              ? from.includes(`/${currentUser.split('@')[0]}`)
               : from.split('/')[0] === currentUser;
             
             if (!isCurrentUser) {
@@ -329,7 +331,7 @@ export const useXMPPStore = create<XMPPState>()(
           
           if (active || inactive || gone) {
             const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-            const userJid = type === 'groupchat' ? from : from.split('/')[0];
+            const userJid = from;
             get().clearTypingState(stateChatJid, userJid);
             return;
           }
@@ -373,9 +375,9 @@ export const useXMPPStore = create<XMPPState>()(
           // Handle incoming message with body
           if (body) {
             // Clear typing state when message is received
-            const messageChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-            const userJid = type === 'groupchat' ? from : from.split('/')[0];
-            get().clearTypingState(messageChatJid, userJid);
+            const messageStateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const messageUserJid = from;
+            get().clearTypingState(messageStateChatJid, messageUserJid);
             
             // Send receipt for received message
             const { client } = get();
@@ -415,8 +417,10 @@ export const useXMPPStore = create<XMPPState>()(
             
             // Show toast notification for new messages (except from current user)
             const isOwnMessage = type === 'groupchat' 
-              ? from.includes(currentUser.split('@')[0])
+              ? from.includes(`/${currentUser.split('@')[0]}`)
               : from.split('/')[0] === currentUser;
+            
+            const messageChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             
             if (!isOwnMessage && messageChatJid !== activeChat) {
               const senderName = type === 'groupchat'
