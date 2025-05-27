@@ -743,7 +743,7 @@ export const useXMPPStore = create<XMPPState>()(
             name: roomName,
             description: description || '',
             participants: [],
-            isOwner: true,
+            isOwner: true, // Set creator as owner by default
             isPermanent,
             affiliations: [],
             avatar: null

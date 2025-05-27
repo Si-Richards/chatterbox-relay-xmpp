@@ -248,7 +248,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               </Card>
             )}
 
-            {/* Danger Zone */}
+            {/* Danger Zone - Only show for room owners */}
             {isOwner && (
               <Card className="border-red-200">
                 <CardHeader>
