@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -467,18 +468,21 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
-          // Ensure message.from is properly typed as string with explicit type guards
-          const messageFrom = String(message.from || '');
+          // Ensure proper type safety for message.from
+          const messageFromRaw = message.from;
+          const messageFrom = typeof messageFromRaw === 'string' ? messageFromRaw : String(messageFromRaw || '');
           const isOwn = isFromCurrentUser(messageFrom);
           
-          // Fix the senderName calculation with proper type safety
+          // Calculate sender name with proper type safety
           let senderName = 'Unknown';
-          if (activeChatType === 'groupchat') {
-            const roomNick = messageFrom.includes('/') ? messageFrom.split('/')[1] : '';
-            const userPart = messageFrom.includes('@') ? messageFrom.split('@')[0] : '';
-            senderName = roomNick || userPart || 'Unknown';
-          } else {
-            senderName = messageFrom.includes('@') ? messageFrom.split('@')[0] : messageFrom || 'Unknown';
+          if (messageFrom && typeof messageFrom === 'string') {
+            if (activeChatType === 'groupchat') {
+              const roomNick = messageFrom.includes('/') ? messageFrom.split('/')[1] : '';
+              const userPart = messageFrom.includes('@') ? messageFrom.split('@')[0] : '';
+              senderName = roomNick || userPart || 'Unknown';
+            } else {
+              senderName = messageFrom.includes('@') ? messageFrom.split('@')[0] : messageFrom || 'Unknown';
+            }
           }
 
           const messageContent = (
