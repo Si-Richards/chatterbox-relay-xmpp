@@ -4,6 +4,12 @@ export interface Contact {
   name: string;
   status: 'online' | 'offline' | 'away' | 'busy';
   avatar?: string;
+  presence?: string;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  users: string[];
 }
 
 export interface Message {
@@ -20,10 +26,7 @@ export interface Message {
     size: number;
     url: string;
   };
-  reactions?: Array<{
-    emoji: string;
-    from: string;
-  }>;
+  reactions?: MessageReaction[];
 }
 
 export interface Room {
@@ -38,6 +41,7 @@ export interface Room {
   }>;
   isOwner?: boolean;
   avatar?: string;
+  isPermanent?: boolean;
   affiliations?: Array<{
     jid: string;
     affiliation: string;

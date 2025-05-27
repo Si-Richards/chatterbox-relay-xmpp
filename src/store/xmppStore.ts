@@ -40,7 +40,7 @@ interface XMPPState {
   setRoomSortMethod: (method: 'name' | 'recent' | 'participants') => void;
   
   addMessage: (chatJid: string, message: Message) => void;
-  updateMessageStatus: (chatJid: string, messageId: string, status: string) => void;
+  updateMessageStatus: (chatJid: string, messageId: string, status: 'sent' | 'delivered' | 'read') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addReaction: (chatJid: string, messageId: string, emoji: string) => void;
   
@@ -140,34 +140,49 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       ...state.messages,
       [chatJid]: state.messages[chatJid]?.map(msg =>
         msg.id === messageId ? { ...msg, status } : msg
-      ),
+      ) || [],
     },
   })),
   deleteMessage: (chatJid, messageId) => set((state) => ({
     messages: {
       ...state.messages,
-      [chatJid]: state.messages[chatJid]?.filter(msg => msg.id !== messageId),
+      [chatJid]: state.messages[chatJid]?.filter(msg => msg.id !== messageId) || [],
     },
   })),
   addReaction: (chatJid, messageId, emoji) => set((state) => ({
     messages: {
       ...state.messages,
-      [chatJid]: state.messages[chatJid]?.map(msg =>
-        msg.id === messageId
-          ? {
-            ...msg,
-            reactions: msg.reactions
-              ? [...msg.reactions, { emoji, from: get().currentUser }]
-              : [{ emoji, from: get().currentUser }],
+      [chatJid]: state.messages[chatJid]?.map(msg => {
+        if (msg.id === messageId) {
+          const existingReactions = msg.reactions || [];
+          const existingReaction = existingReactions.find(r => r.emoji === emoji);
+          
+          if (existingReaction) {
+            // Add user to existing reaction
+            const updatedReactions = existingReactions.map(r => 
+              r.emoji === emoji 
+                ? { ...r, users: [...r.users, get().currentUser] }
+                : r
+            );
+            return { ...msg, reactions: updatedReactions };
+          } else {
+            // Create new reaction
+            return {
+              ...msg,
+              reactions: [...existingReactions, { emoji, users: [get().currentUser] }]
+            };
           }
-          : msg
-      ),
+        }
+        return msg;
+      }) || [],
     },
   })),
 
   handleStanza: (stanza: any) => {
     const { type, from, to } = stanza._attributes;
     const { contacts, rooms, currentUser, updateContact, updateRoom } = get();
+
+    console.log('Handling stanza:', { type, from, to, stanzaName: stanza.name });
 
     // Handle presence stanzas to update contact status
     if (stanza.name === 'presence') {
@@ -176,7 +191,13 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
 
       if (contact) {
         const presenceType = stanza.attrs.type || 'available';
-        const updatedContact = { ...contact, status: presenceType !== 'unavailable' ? 'online' : 'offline' };
+        let status: 'online' | 'offline' | 'away' | 'busy' = 'offline';
+        
+        if (presenceType !== 'unavailable') {
+          status = 'online';
+        }
+        
+        const updatedContact = { ...contact, status };
         updateContact(updatedContact);
       }
 
@@ -384,7 +405,8 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       name: roomName,
       description: description || '',
       participants: [],
-      isOwner: true
+      isOwner: true,
+      isPermanent: isPermanent || false
     };
     
     get().addRoom(newRoom);
