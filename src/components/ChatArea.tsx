@@ -467,12 +467,19 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
-          // Ensure message.from is properly typed as string with explicit casting
+          // Ensure message.from is properly typed as string with explicit type guards
           const messageFrom = String(message.from || '');
           const isOwn = isFromCurrentUser(messageFrom);
-          const senderName = activeChatType === 'groupchat' 
-            ? (messageFrom.split('/')[1] || messageFrom.split('@')[0] || 'Unknown')
-            : (messageFrom.split('@')[0] || 'Unknown');
+          
+          // Fix the senderName calculation with proper type safety
+          let senderName = 'Unknown';
+          if (activeChatType === 'groupchat') {
+            const roomNick = messageFrom.includes('/') ? messageFrom.split('/')[1] : '';
+            const userPart = messageFrom.includes('@') ? messageFrom.split('@')[0] : '';
+            senderName = roomNick || userPart || 'Unknown';
+          } else {
+            senderName = messageFrom.includes('@') ? messageFrom.split('@')[0] : messageFrom || 'Unknown';
+          }
 
           const messageContent = (
             <div className="flex items-start space-x-2">
