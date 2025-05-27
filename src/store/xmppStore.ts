@@ -48,6 +48,7 @@ interface Room {
   isOwner?: boolean;
   isPermanent?: boolean;
   affiliations?: RoomAffiliation[];
+  avatar?: string;
 }
 
 interface XMPPState {
@@ -61,6 +62,8 @@ interface XMPPState {
   activeChatType: 'chat' | 'groupchat' | null;
   userStatus: 'online' | 'away' | 'dnd' | 'xa';
   userAvatar: string | null;
+  contactSortMethod: 'newest' | 'alphabetical';
+  roomSortMethod: 'newest' | 'alphabetical';
   
   // Actions
   connect: (username: string, password: string) => Promise<void>;
@@ -78,6 +81,7 @@ interface XMPPState {
   setActiveChat: (jid: string, type: 'chat' | 'groupchat') => void;
   setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
   setUserAvatar: (avatarUrl: string) => void;
+  setRoomAvatar: (roomJid: string, avatarUrl: string) => void;
   markMessageAsDelivered: (from: string, id: string) => void;
   markMessageAsRead: (from: string, id: string) => void;
   fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
@@ -85,6 +89,9 @@ interface XMPPState {
   addReaction: (chatJid: string, messageId: string, emoji: string) => void;
   fetchRoomAffiliations: (roomJid: string) => void;
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: 'owner' | 'admin' | 'member' | 'none') => void;
+  fetchRoomVCard: (roomJid: string) => void;
+  setContactSortMethod: (method: 'newest' | 'alphabetical') => void;
+  setRoomSortMethod: (method: 'newest' | 'alphabetical') => void;
 }
 
 export const useXMPPStore = create<XMPPState>()(
@@ -100,6 +107,8 @@ export const useXMPPStore = create<XMPPState>()(
       activeChatType: null,
       userStatus: 'online',
       userAvatar: null,
+      contactSortMethod: 'newest',
+      roomSortMethod: 'newest',
       
       handleStanza: (stanza: any) => {
         // Handle MAM result messages
@@ -168,8 +177,9 @@ export const useXMPPStore = create<XMPPState>()(
           }
         }
 
-        // Handle roster (contact list) response
+        // Handle IQ results
         if (stanza.is('iq') && stanza.attrs.type === 'result') {
+          // Handle roster (contact list) response
           const query = stanza.getChild('query', 'jabber:iq:roster');
           if (query) {
             const items = query.getChildren('item');
@@ -195,6 +205,31 @@ export const useXMPPStore = create<XMPPState>()(
             return;
           }
           
+          // Handle room VCard response
+          const vcard = stanza.getChild('vCard', 'vcard-temp');
+          if (vcard) {
+            const roomJid = stanza.attrs.from;
+            const photo = vcard.getChild('PHOTO');
+            let avatarUrl = null;
+            
+            if (photo) {
+              const binval = photo.getChildText('BINVAL');
+              const type = photo.getChildText('TYPE') || 'image/jpeg';
+              if (binval) {
+                avatarUrl = `data:${type};base64,${binval}`;
+              }
+            }
+            
+            set((state) => ({
+              rooms: state.rooms.map(room => 
+                room.jid === roomJid 
+                  ? { ...room, avatar: avatarUrl }
+                  : room
+              )
+            }));
+            return;
+          }
+          
           // Handle disco#items response for MUC discovery
           const discoQuery = stanza.getChild('query', 'http://jabber.org/protocol/disco#items');
           if (discoQuery && stanza.attrs.from?.includes('conference')) {
@@ -205,10 +240,20 @@ export const useXMPPStore = create<XMPPState>()(
               participants: [],
               isOwner: false,
               isPermanent: true,
-              affiliations: []
+              affiliations: [],
+              avatar: null
             }));
             
             set({ rooms });
+            
+            // Fetch VCard for each room
+            const { client } = get();
+            if (client) {
+              rooms.forEach(room => {
+                get().fetchRoomVCard(room.jid);
+              });
+            }
+            
             return;
           }
           
@@ -670,9 +715,15 @@ export const useXMPPStore = create<XMPPState>()(
             participants: [],
             isOwner: true,
             isPermanent,
-            affiliations: []
+            affiliations: [],
+            avatar: null
           }]
         }));
+
+        // Fetch room VCard
+        setTimeout(() => {
+          get().fetchRoomVCard(roomJid);
+        }, 2000);
       },
 
       updateRoomDescription: (roomJid: string, description: string) => {
@@ -728,8 +779,13 @@ export const useXMPPStore = create<XMPPState>()(
         client.send(presence);
 
         set((state) => ({
-          rooms: [...state.rooms, { jid: roomJid, name: roomJid.split('@')[0], participants: [], affiliations: [] }]
+          rooms: [...state.rooms, { jid: roomJid, name: roomJid.split('@')[0], participants: [], affiliations: [], avatar: null }]
         }));
+
+        // Fetch room VCard
+        setTimeout(() => {
+          get().fetchRoomVCard(roomJid);
+        }, 1000);
       },
       
       // Invite a user to a group chat
@@ -890,6 +946,69 @@ export const useXMPPStore = create<XMPPState>()(
         
         client.send(presence);
       },
+
+      // Set room avatar
+      setRoomAvatar: (roomJid: string, avatarUrl: string) => {
+        const { client } = get();
+        if (!client) return;
+
+        // Convert URL to base64 if it's a data URL
+        let base64Data = '';
+        let mimeType = 'image/jpeg';
+        
+        if (avatarUrl.startsWith('data:')) {
+          const parts = avatarUrl.split(',');
+          if (parts.length === 2) {
+            const header = parts[0];
+            base64Data = parts[1];
+            const mimeMatch = header.match(/data:([^;]+)/);
+            if (mimeMatch) {
+              mimeType = mimeMatch[1];
+            }
+          }
+        } else {
+          // For external URLs, we'll store the URL directly for now
+          // In a real implementation, you'd fetch and convert to base64
+          base64Data = avatarUrl;
+        }
+
+        // Send VCard update
+        const vcardIq = xml(
+          'iq',
+          { type: 'set', to: roomJid, id: `vcard-${Date.now()}` },
+          xml('vCard', { xmlns: 'vcard-temp' },
+            xml('PHOTO',
+              xml('TYPE', {}, mimeType),
+              xml('BINVAL', {}, base64Data)
+            )
+          )
+        );
+
+        client.send(vcardIq);
+
+        // Update local state
+        set((state) => ({
+          rooms: state.rooms.map(room => 
+            room.jid === roomJid 
+              ? { ...room, avatar: avatarUrl }
+              : room
+          )
+        }));
+      },
+
+      // Fetch room VCard
+      fetchRoomVCard: (roomJid: string) => {
+        const { client } = get();
+        if (!client) return;
+
+        const vcardIq = xml(
+          'iq',
+          { type: 'get', to: roomJid, id: `vcard-get-${Date.now()}` },
+          xml('vCard', { xmlns: 'vcard-temp' })
+        );
+
+        client.send(vcardIq);
+      },
       
       // Mark message as delivered
       markMessageAsDelivered: (from: string, id: string) => {
@@ -980,7 +1099,10 @@ export const useXMPPStore = create<XMPPState>()(
                   { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
                   { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
                   { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
-                  { jid: 'test@ejabberd.voicehost.io', name: 'test' }
+                  { jid: 'test@ejabberd.voicehost.io', name: 'test' },
+                  { jid: 'admin@ejabberd.voicehost.io', name: 'admin' },
+                  { jid: 'support@ejabberd.voicehost.io', name: 'support' },
+                  { jid: 'guest@ejabberd.voicehost.io', name: 'guest' }
                 ];
                 
                 // Filter out current user
@@ -1006,7 +1128,10 @@ export const useXMPPStore = create<XMPPState>()(
               { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
               { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
               { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
-              { jid: 'test@ejabberd.voicehost.io', name: 'test' }
+              { jid: 'test@ejabberd.voicehost.io', name: 'test' },
+              { jid: 'admin@ejabberd.voicehost.io', name: 'admin' },
+              { jid: 'support@ejabberd.voicehost.io', name: 'support' },
+              { jid: 'guest@ejabberd.voicehost.io', name: 'guest' }
             ];
             
             const currentUser = get().currentUser;
@@ -1133,6 +1258,16 @@ export const useXMPPStore = create<XMPPState>()(
             [roomJid]: [...(state.messages[roomJid] || []), systemMessage]
           }
         }));
+      },
+
+      // Set contact sorting method
+      setContactSortMethod: (method: 'newest' | 'alphabetical') => {
+        set({ contactSortMethod: method });
+      },
+
+      // Set room sorting method  
+      setRoomSortMethod: (method: 'newest' | 'alphabetical') => {
+        set({ roomSortMethod: method });
       }
     }),
     {
@@ -1142,7 +1277,9 @@ export const useXMPPStore = create<XMPPState>()(
         contacts: state.contacts,
         rooms: state.rooms,
         userAvatar: state.userAvatar,
-        userStatus: state.userStatus
+        userStatus: state.userStatus,
+        contactSortMethod: state.contactSortMethod,
+        roomSortMethod: state.roomSortMethod
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.messages) {

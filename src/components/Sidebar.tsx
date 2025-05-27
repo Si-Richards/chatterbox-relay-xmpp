@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
-import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users, ArrowUpDown, Clock, AlphabeticalIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +40,8 @@ export const Sidebar = () => {
     rooms, 
     messages,
     activeChat,
+    contactSortMethod,
+    roomSortMethod,
     disconnect, 
     addContact, 
     createRoom, 
@@ -40,7 +49,9 @@ export const Sidebar = () => {
     joinRoom,
     setActiveChat, 
     userStatus, 
-    setUserStatus 
+    setUserStatus,
+    setContactSortMethod,
+    setRoomSortMethod
   } = useXMPPStore();
   
   const [newContactJid, setNewContactJid] = useState('');
@@ -53,13 +64,45 @@ export const Sidebar = () => {
   const [contactsCollapsed, setContactsCollapsed] = useState(false);
   const [roomsCollapsed, setRoomsCollapsed] = useState(false);
 
-  const filteredContacts = contacts.filter(contact =>
-    contact.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Function to get last message timestamp for a chat
+  const getLastMessageTime = (chatJid: string) => {
+    const chatMessages = messages[chatJid] || [];
+    if (chatMessages.length === 0) return new Date(0);
+    return new Date(chatMessages[chatMessages.length - 1].timestamp);
+  };
 
-  const filteredRooms = rooms.filter(room =>
-    room.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Sort contacts based on selected method
+  const getSortedContacts = () => {
+    let filtered = contacts.filter(contact =>
+      contact.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (contactSortMethod === 'newest') {
+      return filtered.sort((a, b) => 
+        getLastMessageTime(b.jid).getTime() - getLastMessageTime(a.jid).getTime()
+      );
+    } else {
+      return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    }
+  };
+
+  // Sort rooms based on selected method
+  const getSortedRooms = () => {
+    let filtered = rooms.filter(room =>
+      room.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (roomSortMethod === 'newest') {
+      return filtered.sort((a, b) => 
+        getLastMessageTime(b.jid).getTime() - getLastMessageTime(a.jid).getTime()
+      );
+    } else {
+      return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    }
+  };
+
+  const filteredContacts = getSortedContacts();
+  const filteredRooms = getSortedRooms();
 
   const getPresenceColor = (presence: string) => {
     switch (presence) {
@@ -251,10 +294,31 @@ export const Sidebar = () => {
         <div className="p-2 space-y-2">
           {/* Contacts */}
           <Collapsible open={!contactsCollapsed} onOpenChange={(open) => setContactsCollapsed(!open)}>
-            <CollapsibleTrigger className="flex items-center w-full text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
-              {contactsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-              Contacts ({filteredContacts.length})
-            </CollapsibleTrigger>
+            <div className="flex items-center justify-between">
+              <CollapsibleTrigger className="flex items-center text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
+                {contactsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                Contacts ({filteredContacts.length})
+              </CollapsibleTrigger>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                    <ArrowUpDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setContactSortMethod('newest')}>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Sort by Recent
+                    {contactSortMethod === 'newest' && ' ✓'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setContactSortMethod('alphabetical')}>
+                    <AlphabeticalIcon className="h-4 w-4 mr-2" />
+                    Sort Alphabetically
+                    {contactSortMethod === 'alphabetical' && ' ✓'}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <CollapsibleContent>
               <div className="space-y-1 mt-1">
                 {filteredContacts.map((contact) => {
@@ -271,7 +335,12 @@ export const Sidebar = () => {
                     >
                       <CardContent className="p-3 flex items-center space-x-2">
                         <div className="relative">
-                          <User className="w-4 h-4 text-gray-500" />
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={contact.avatar} alt={contact.name} />
+                            <AvatarFallback className="bg-gray-100 text-gray-600">
+                              <User className="w-4 h-4" />
+                            </AvatarFallback>
+                          </Avatar>
                           <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -293,10 +362,31 @@ export const Sidebar = () => {
 
           {/* Rooms */}
           <Collapsible open={!roomsCollapsed} onOpenChange={(open) => setRoomsCollapsed(!open)}>
-            <CollapsibleTrigger className="flex items-center w-full text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
-              {roomsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-              Rooms ({filteredRooms.length})
-            </CollapsibleTrigger>
+            <div className="flex items-center justify-between">
+              <CollapsibleTrigger className="flex items-center text-xs font-medium text-gray-500 px-2 py-1 hover:bg-gray-100 rounded">
+                {roomsCollapsed ? <ChevronRight className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                Rooms ({filteredRooms.length})
+              </CollapsibleTrigger>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                    <ArrowUpDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setRoomSortMethod('newest')}>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Sort by Recent
+                    {roomSortMethod === 'newest' && ' ✓'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRoomSortMethod('alphabetical')}>
+                    <AlphabeticalIcon className="h-4 w-4 mr-2" />
+                    Sort Alphabetically
+                    {roomSortMethod === 'alphabetical' && ' ✓'}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <CollapsibleContent>
               <div className="space-y-1 mt-1">
                 {filteredRooms.map((room) => {
@@ -313,7 +403,12 @@ export const Sidebar = () => {
                     >
                       <CardContent className="p-3 flex items-center space-x-2">
                         <div className="flex items-center space-x-1 flex-shrink-0">
-                          <Hash className="w-4 h-4 text-gray-500" />
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={room.avatar} alt={room.name} />
+                            <AvatarFallback className="bg-blue-100 text-blue-600">
+                              <Hash className="w-4 h-4" />
+                            </AvatarFallback>
+                          </Avatar>
                           {room.isPermanent && <Infinity className="w-3 h-3 text-blue-500" />}
                         </div>
                         <div className="flex-1 min-w-0">

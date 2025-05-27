@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trash2, Crown, Shield, User, UserMinus } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
+import { RoomAvatarSelector } from './RoomAvatarSelector';
 
 interface RoomSettingsProps {
   open: boolean;
@@ -129,7 +130,22 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               <CardHeader>
                 <CardTitle className="text-lg">Room Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-4">
+                {/* Room Avatar */}
+                {isOwner && (
+                  <div className="flex items-center space-x-4">
+                    <div>
+                      <Label className="text-sm font-medium">Room Avatar</Label>
+                      <p className="text-xs text-gray-500 mb-2">Click to change the room avatar</p>
+                    </div>
+                    <RoomAvatarSelector 
+                      roomJid={room.jid}
+                      currentAvatar={room.avatar}
+                      roomName={room.name}
+                    />
+                  </div>
+                )}
+
                 <div>
                   <Label className="text-sm font-medium">Name</Label>
                   <p className="text-sm text-gray-600">{room.name}</p>
