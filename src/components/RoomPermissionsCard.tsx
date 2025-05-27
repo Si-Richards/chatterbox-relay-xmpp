@@ -17,13 +17,13 @@ interface Affiliation {
   role?: string;
 }
 
-interface Room {
+interface RoomWithAffiliations {
   jid: string;
   affiliations?: Affiliation[];
 }
 
 interface RoomPermissionsCardProps {
-  room: Room;
+  room: RoomWithAffiliations;
   isLoadingAffiliations: boolean;
   onRefreshAffiliations: () => void;
 }

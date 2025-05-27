@@ -8,7 +8,7 @@ interface Room {
   jid: string;
   name: string;
   description?: string;
-  isPermanent: boolean;
+  isPermanent?: boolean;
   avatar?: string;
 }
 
