@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Contact, Message, Room } from '@/types';
-import { xml, jid } from '@xmpp/client';
+import { client, xml, jid } from '@xmpp/client';
 
 interface XMPPState {
   client: any;
@@ -64,7 +64,7 @@ interface XMPPState {
   sendChatState: (to: string, state: 'composing' | 'paused' | 'active', chatType: 'chat' | 'groupchat') => void;
   setCurrentUserTyping: (chatJid: string, isTyping: boolean) => void;
   
-  // New methods for proper XMPP functionality
+  // XMPP functionality
   requestRoster: () => void;
   discoverServices: () => void;
   discoverRooms: (mucService: string) => void;
@@ -127,7 +127,16 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   })),
   setActiveChat: (chatJid: string | null, chatType: 'chat' | 'groupchat' | null) => 
     set({ activeChat: chatJid, activeChatType: chatType }),
-  setUserStatus: (status) => set({ userStatus: status }),
+  setUserStatus: (status) => {
+    set({ userStatus: status });
+    const { client, currentUser } = get();
+    if (client && currentUser) {
+      // Send presence with new status
+      const show = status === 'away' ? 'away' : status === 'busy' ? 'dnd' : '';
+      const presence = xml('presence', {}, show ? xml('show', {}, show) : null);
+      client.send(presence);
+    }
+  },
   setContactSortMethod: (method) => set({ contactSortMethod: method }),
   setRoomSortMethod: (method) => set({ roomSortMethod: method }),
 
@@ -163,7 +172,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
           const existingReaction = existingReactions.find(r => r.emoji === emoji);
           
           if (existingReaction) {
-            // Add user to existing reaction
             const updatedReactions = existingReactions.map(r => 
               r.emoji === emoji 
                 ? { ...r, users: [...r.users, get().currentUser] }
@@ -171,7 +179,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
             );
             return { ...msg, reactions: updatedReactions };
           } else {
-            // Create new reaction
             return {
               ...msg,
               reactions: [...existingReactions, { emoji, users: [get().currentUser] }]
@@ -184,12 +191,58 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   })),
 
   handleStanza: (stanza: any) => {
-    const { type, from, to } = stanza._attributes;
-    const { contacts, rooms, currentUser, updateContact, updateRoom } = get();
+    const { type, from, to, id } = stanza.attrs;
+    const { contacts, rooms, currentUser, updateContact, updateRoom, addMessage } = get();
 
-    console.log('Handling stanza:', { type, from, to, stanzaName: stanza.name });
+    console.log('Handling stanza:', { type, from, to, stanzaName: stanza.name, id });
 
-    // Handle presence stanzas to update contact status
+    // Handle roster IQ responses
+    if (stanza.name === 'iq' && stanza.attrs.type === 'result') {
+      const query = stanza.getChild('query');
+      
+      // Roster response
+      if (query && query.attrs.xmlns === 'jabber:iq:roster') {
+        console.log('Processing roster response');
+        const items = query.getChildren('item');
+        const newContacts: Contact[] = items.map((item: any) => ({
+          jid: item.attrs.jid,
+          name: item.attrs.name || item.attrs.jid.split('@')[0],
+          status: 'offline'
+        }));
+        set({ contacts: newContacts });
+        console.log('Added contacts:', newContacts);
+      }
+      
+      // Service discovery response
+      if (query && query.attrs.xmlns === 'http://jabber.org/protocol/disco#items') {
+        console.log('Processing service discovery response');
+        const items = query.getChildren('item');
+        items.forEach((item: any) => {
+          const serviceJid = item.attrs.jid;
+          if (serviceJid && serviceJid.includes('muc') || serviceJid.includes('conference')) {
+            console.log('Found MUC service:', serviceJid);
+            get().discoverRooms(serviceJid);
+          }
+        });
+      }
+      
+      // Room discovery response
+      if (query && query.attrs.xmlns === 'http://jabber.org/protocol/disco#items' && from && from.includes('muc')) {
+        console.log('Processing room discovery response');
+        const items = query.getChildren('item');
+        const newRooms: Room[] = items.map((item: any) => ({
+          jid: item.attrs.jid,
+          name: item.attrs.name || item.attrs.jid.split('@')[0],
+          participants: [],
+          isOwner: false,
+          isPermanent: true
+        }));
+        set((state) => ({ rooms: [...state.rooms, ...newRooms] }));
+        console.log('Added rooms:', newRooms);
+      }
+    }
+
+    // Handle presence stanzas
     if (stanza.name === 'presence') {
       const contactJid = from.split('/')[0];
       const contact = contacts.find(c => c.jid === contactJid);
@@ -199,41 +252,40 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         let status: 'online' | 'offline' | 'away' | 'busy' = 'offline';
         
         if (presenceType !== 'unavailable') {
-          status = 'online';
+          const show = stanza.getChildText('show');
+          if (show === 'away') status = 'away';
+          else if (show === 'dnd') status = 'busy';
+          else status = 'online';
         }
         
         const updatedContact = { ...contact, status };
         updateContact(updatedContact);
       }
 
-      // Handle MUC presence to update room participants
+      // Handle MUC presence
       if (type === 'groupchat') {
         const roomJid = to;
         const room = rooms.find(r => r.jid === roomJid);
 
         if (room) {
           const userJid = from;
-          const affiliation = stanza.getChild('x', 'http://jabber.org/protocol/muc#user')
-            ?.getChild('item')
-            ?.attrs?.affiliation || 'none';
-          const role = stanza.getChild('x', 'http://jabber.org/protocol/muc#user')
-            ?.getChild('item')
-            ?.attrs?.role || 'none';
+          const x = stanza.getChild('x', 'http://jabber.org/protocol/muc#user');
+          const item = x?.getChild('item');
+          const affiliation = item?.attrs?.affiliation || 'none';
+          const role = item?.attrs?.role || 'none';
 
-          // Check if the user is the current user
           const isCurrentUser = userJid.includes(`/${currentUser.split('@')[0]}`);
 
-          // Update the participant list based on presence and affiliation
           let updatedParticipants = [...(room.participants || [])];
-          const existingParticipantIndex = updatedParticipants.findIndex(p => typeof p === 'string' ? p === userJid : p.jid === userJid);
+          const existingParticipantIndex = updatedParticipants.findIndex(p => 
+            typeof p === 'string' ? p === userJid : p.jid === userJid
+          );
 
           if (affiliation === 'none' || role === 'none') {
-            // Remove the participant if affiliation or role is none
             if (existingParticipantIndex !== -1) {
               updatedParticipants.splice(existingParticipantIndex, 1);
             }
           } else {
-            // Update or add the participant
             const participantData = {
               jid: userJid,
               nick: userJid.split('/')[1] || userJid.split('@')[0],
@@ -248,36 +300,25 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
             }
           }
 
-          // Update the room with the new participant list
           const updatedRoom = { ...room, participants: updatedParticipants };
           updateRoom(updatedRoom);
         }
       }
     }
 
-    // Handle chat states (composing, paused, active, etc.)
+    // Handle chat states
     const composing = stanza.getChild('composing', 'http://jabber.org/protocol/chatstates');
     const paused = stanza.getChild('paused', 'http://jabber.org/protocol/chatstates');
     const active = stanza.getChild('active', 'http://jabber.org/protocol/chatstates');
-    const inactive = stanza.getChild('inactive', 'http://jabber.org/protocol/chatstates');
-    const gone = stanza.getChild('gone', 'http://jabber.org/protocol/chatstates');
     
     if (composing || paused) {
-      // For MUC rooms: chatJid is room JID, userJid is full JID with nickname
-      // For direct chat: chatJid is user JID, userJid is user JID
       const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-      const userJid = from; // Keep full JID to preserve nickname for MUC
+      const userJid = from;
       const state = composing ? 'composing' : 'paused';
       
-      console.log('Chat state received:', { type, from, stateChatJid, userJid, state });
-      
-      // Don't show typing for current user
-      const { currentUser } = get();
       const isCurrentUser = type === 'groupchat' 
         ? from.includes(`/${currentUser.split('@')[0]}`)
         : from.split('/')[0] === currentUser;
-      
-      console.log('Is current user typing?', { isCurrentUser, currentUser, from });
       
       if (!isCurrentUser) {
         get().setChatState(stateChatJid, userJid, state);
@@ -285,10 +326,9 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       return;
     }
     
-    if (active || inactive || gone) {
+    if (active) {
       const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
       const userJid = from;
-      console.log('Clearing chat state:', { stateChatJid, userJid });
       get().clearTypingState(stateChatJid, userJid);
       return;
     }
@@ -298,7 +338,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       const body = stanza.getChildText('body');
       if (body) {
         const message: Message = {
-          id: stanza.id(),
+          id: stanza.attrs.id || Math.random().toString(36).substring(7),
           from: from,
           to: to,
           body: body,
@@ -306,7 +346,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
           status: 'sent',
           type: type === 'groupchat' ? 'groupchat' : 'chat',
         };
-        get().addMessage(from, message);
+        addMessage(from, message);
       }
     }
   },
@@ -377,9 +417,61 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   },
 
   connect: async (username: string, password: string) => {
-    // Placeholder implementation - this would need to be implemented with actual XMPP connection logic
-    console.log('Connecting...', username);
-    set({ isConnected: true, currentUser: `${username}@localhost` });
+    try {
+      console.log('Creating XMPP client...');
+      
+      // Create XMPP client
+      const xmppClient = client({
+        service: 'ws://localhost:5280/ws', // WebSocket connection to XMPP server
+        domain: 'localhost',
+        username: username,
+        password: password,
+      });
+
+      console.log('Setting up event handlers...');
+
+      // Set up event handlers
+      xmppClient.on('error', (err: any) => {
+        console.error('XMPP Error:', err);
+        set({ isConnected: false });
+      });
+
+      xmppClient.on('offline', () => {
+        console.log('XMPP client offline');
+        set({ isConnected: false });
+      });
+
+      xmppClient.on('stanza', (stanza: any) => {
+        get().handleStanza(stanza);
+      });
+
+      xmppClient.on('online', (address: any) => {
+        console.log('XMPP client online:', address.toString());
+        set({ 
+          isConnected: true, 
+          currentUser: address.toString(),
+          userStatus: 'online'
+        });
+
+        // Send initial presence
+        xmppClient.send(xml('presence'));
+
+        // Request roster
+        get().requestRoster();
+
+        // Discover services
+        get().discoverServices();
+      });
+
+      console.log('Starting XMPP client...');
+      set({ client: xmppClient });
+      await xmppClient.start();
+
+    } catch (error) {
+      console.error('Connection failed:', error);
+      set({ isConnected: false });
+      throw error;
+    }
   },
 
   disconnect: () => {
@@ -387,7 +479,15 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     if (client) {
       client.stop();
     }
-    set({ isConnected: false, client: null, currentUser: '' });
+    set({ 
+      isConnected: false, 
+      client: null, 
+      currentUser: '',
+      contacts: [],
+      rooms: [],
+      messages: {},
+      userStatus: 'offline'
+    });
   },
 
   joinRoom: (roomJid: string) => {
@@ -404,7 +504,7 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     const { client, currentUser } = get();
     if (!client) return;
 
-    const roomJid = `${roomName}@muc.localhost`;
+    const roomJid = `${roomName}@conference.localhost`;
     const newRoom: Room = {
       jid: roomJid,
       name: roomName,
@@ -427,7 +527,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     const { client } = get();
     if (!client) return;
 
-    // Send a destroy configuration to the room
     const message = xml('message', {
       to: roomJid,
       type: 'groupchat'
@@ -438,7 +537,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     );
     client.send(message);
 
-    // Remove the room from the local state
     set((state) => ({
       rooms: state.rooms.filter(room => room.jid !== roomJid),
     }));
@@ -478,7 +576,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   
     client.send(message);
   
-    // Update the room in the local state
     set((state) => ({
       rooms: state.rooms.map(room =>
         room.jid === roomJid ? { ...room, description: description } : room
@@ -501,25 +598,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     );
 
     client.send(iq);
-
-    // Listen for the response and update the state
-    client.on('stanza', (stanza: any) => {
-      if (stanza.attrs.id === 'get-affiliations' && stanza.attrs.type === 'result') {
-        const items = stanza.getChild('query')?.getChildren('item');
-        const affiliations = items.map((item: any) => ({
-          jid: item.attrs.jid,
-          affiliation: item.attrs.affiliation,
-          role: item.attrs.role,
-          name: item.attrs.name || item.attrs.jid.split('@')[0]
-        }));
-
-        set((state) => ({
-          rooms: state.rooms.map(room =>
-            room.jid === roomJid ? { ...room, affiliations: affiliations } : room
-          ),
-        }));
-      }
-    });
   },
 
   setRoomAffiliation: (roomJid, userJid, affiliation) => {
@@ -538,7 +616,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
 
     client.send(iq);
 
-    // Update the room in the local state
     set((state) => ({
       rooms: state.rooms.map(room => {
         if (room.jid === roomJid) {
@@ -560,28 +637,15 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     if (!client) return [];
   
     const discoItemsIQ = xml('iq', {
-      to: 'localhost', // Replace with your server domain
+      to: 'localhost',
       type: 'get',
-      id: 'disco-items-1'
+      id: 'disco-items-users'
     },
       xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
     );
   
     client.send(discoItemsIQ);
-  
-    return new Promise((resolve) => {
-      client.on('stanza', (stanza: any) => {
-        if (stanza.attrs.id === 'disco-items-1' && stanza.attrs.type === 'result') {
-          const items = stanza.getChild('query')?.getChildren('item');
-          const users = items.map((item: any) => ({
-            jid: item.attrs.jid,
-            name: item.attrs.jid.split('@')[0]
-          }));
-          set({ serverUsers: users.map(u => u.jid) });
-          resolve(users);
-        }
-      });
-    });
+    return [];
   },
 
   setChatState: (chatJid: string, userJid: string, state: 'composing' | 'paused') => {
@@ -602,7 +666,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         ]
       };
       
-      console.log('New typing states:', newTypingStates);
       return { typingStates: newTypingStates };
     });
   },
@@ -633,7 +696,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
       type: chatType === 'groupchat' ? 'groupchat' : 'chat'
     });
 
-    // Add the appropriate chat state
     if (state === 'composing') {
       message.c('composing', { xmlns: 'http://jabber.org/protocol/chatstates' });
     } else if (state === 'paused') {
@@ -647,7 +709,6 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
 
   setCurrentUserTyping: (chatJid: string, isTyping: boolean) => {
     set((state) => {
-      // Directly update the typingStates without affecting other states
       return {
         typingStates: {
           ...state.typingStates,
@@ -659,19 +720,51 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
     });
   },
 
-  // New methods for proper XMPP functionality
+  // Real XMPP functionality implementations
   requestRoster: () => {
-    // Placeholder implementation - this would need to be implemented with actual XMPP roster request logic
+    const { client } = get();
+    if (!client) return;
+
     console.log('Requesting roster...');
+    const rosterIQ = xml('iq', {
+      type: 'get',
+      id: 'roster-request'
+    },
+      xml('query', { xmlns: 'jabber:iq:roster' })
+    );
+
+    client.send(rosterIQ);
   },
 
   discoverServices: () => {
-    // Placeholder implementation - this would need to be implemented with actual XMPP service discovery logic
+    const { client } = get();
+    if (!client) return;
+
     console.log('Discovering services...');
+    const discoIQ = xml('iq', {
+      to: 'localhost',
+      type: 'get',
+      id: 'disco-services'
+    },
+      xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+    );
+
+    client.send(discoIQ);
   },
 
   discoverRooms: (mucService: string) => {
-    // Placeholder implementation - this would need to be implemented with actual XMPP room discovery logic
+    const { client } = get();
+    if (!client) return;
+
     console.log(`Discovering rooms on service: ${mucService}`);
+    const discoRoomsIQ = xml('iq', {
+      to: mucService,
+      type: 'get',
+      id: `disco-rooms-${mucService}`
+    },
+      xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+    );
+
+    client.send(discoRoomsIQ);
   },
 }));
