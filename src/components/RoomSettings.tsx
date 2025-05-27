@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Crown, Shield, User, UserMinus } from 'lucide-react';
+import { Trash2, Crown, Shield, User, UserMinus, RefreshCw } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 import { RoomAvatarSelector } from './RoomAvatarSelector';
@@ -42,13 +42,13 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedAffiliation, setSelectedAffiliation] = useState<'owner' | 'admin' | 'member' | 'none'>('member');
+  const [isLoadingAffiliations, setIsLoadingAffiliations] = useState(false);
   
   const { 
     rooms, 
     deleteRoom, 
     fetchRoomAffiliations, 
     setRoomAffiliation,
-    fetchServerUsers
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
@@ -56,9 +56,30 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
 
   React.useEffect(() => {
     if (open && roomJid && isOwner) {
-      fetchRoomAffiliations(roomJid);
+      console.log('RoomSettings: Loading affiliations for room:', roomJid);
+      handleRefreshAffiliations();
     }
-  }, [open, roomJid, isOwner, fetchRoomAffiliations]);
+  }, [open, roomJid, isOwner]);
+
+  const handleRefreshAffiliations = async () => {
+    if (!roomJid || !isOwner) return;
+    
+    setIsLoadingAffiliations(true);
+    try {
+      console.log('RoomSettings: Fetching affiliations for room:', roomJid);
+      await fetchRoomAffiliations(roomJid);
+      console.log('RoomSettings: Affiliations fetched successfully');
+    } catch (error) {
+      console.error('RoomSettings: Failed to fetch affiliations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load room permissions",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingAffiliations(false);
+    }
+  };
 
   const handleDeleteRoom = () => {
     deleteRoom(roomJid);
@@ -72,17 +93,29 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     });
   };
 
-  const handleSetAffiliation = () => {
+  const handleSetAffiliation = async () => {
     if (!selectedUser || !selectedAffiliation) return;
     
-    setRoomAffiliation(roomJid, selectedUser, selectedAffiliation);
-    setSelectedUser('');
-    setSelectedAffiliation('member');
-    
-    toast({
-      title: "Affiliation Updated",
-      description: `User affiliation has been set to ${selectedAffiliation}`
-    });
+    try {
+      await setRoomAffiliation(roomJid, selectedUser, selectedAffiliation);
+      setSelectedUser('');
+      setSelectedAffiliation('member');
+      
+      toast({
+        title: "Affiliation Updated",
+        description: `User affiliation has been set to ${selectedAffiliation}`
+      });
+
+      // Refresh affiliations after setting
+      handleRefreshAffiliations();
+    } catch (error) {
+      console.error('RoomSettings: Failed to set affiliation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user affiliation",
+        variant: "destructive"
+      });
+    }
   };
 
   const getAffiliationIcon = (affiliation: string) => {
@@ -111,7 +144,12 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     }
   };
 
-  if (!room) return null;
+  if (!room) {
+    console.warn('RoomSettings: Room not found for JID:', roomJid);
+    return null;
+  }
+
+  console.log('RoomSettings: Rendering for room:', room.name, 'Affiliations:', room.affiliations);
 
   return (
     <>
@@ -164,6 +202,12 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                     {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
                   </p>
                 </div>
+                <div>
+                  <Label className="text-sm font-medium">Your Role</Label>
+                  <p className="text-sm text-gray-600">
+                    {isOwner ? 'Owner' : 'Member'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -171,7 +215,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
             {isOwner && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Room Affiliations</CardTitle>
+                  <CardTitle className="text-lg">Room Permissions</CardTitle>
                   <CardDescription>
                     Manage user permissions and roles in this room
                   </CardDescription>
@@ -179,7 +223,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                 <CardContent className="space-y-4">
                   {/* Add New Affiliation */}
                   <div className="space-y-3">
-                    <Label className="text-sm font-medium">Add User Affiliation</Label>
+                    <Label className="text-sm font-medium">Add User Permission</Label>
                     <div className="flex space-x-2">
                       <Input
                         placeholder="user@domain.com"
@@ -206,43 +250,63 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
 
                   {/* Current Affiliations */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Current Affiliations</Label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">Current Permissions</Label>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleRefreshAffiliations}
+                        disabled={isLoadingAffiliations}
+                        className="flex items-center space-x-1"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isLoadingAffiliations ? 'animate-spin' : ''}`} />
+                        <span>Refresh</span>
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
                       {room.affiliations && room.affiliations.length > 0 ? (
-                        room.affiliations.map((affiliation) => (
+                        room.affiliations.map((affiliation, index) => (
                           <div
-                            key={affiliation.jid}
-                            className="flex items-center justify-between p-2 border rounded-md"
+                            key={`${affiliation.jid}-${index}`}
+                            className="flex items-center justify-between p-2 border rounded-md bg-gray-50"
                           >
                             <div className="flex items-center space-x-2">
                               {getAffiliationIcon(affiliation.affiliation)}
-                              <span className="text-sm font-medium">{affiliation.name}</span>
-                              <span className="text-xs text-gray-500">{affiliation.jid}</span>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">
+                                  {affiliation.name || affiliation.jid.split('@')[0]}
+                                </span>
+                                <span className="text-xs text-gray-500">{affiliation.jid}</span>
+                              </div>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Badge variant={getAffiliationBadgeVariant(affiliation.affiliation)}>
                                 {affiliation.affiliation}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {affiliation.role}
-                              </Badge>
+                              {affiliation.role && (
+                                <Badge variant="outline" className="text-xs">
+                                  {affiliation.role}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         ))
                       ) : (
-                        <p className="text-sm text-gray-500 text-center py-4">
-                          No affiliations found. Click "Refresh" to load current affiliations.
-                        </p>
+                        <div className="text-center py-8">
+                          {isLoadingAffiliations ? (
+                            <div className="flex items-center justify-center space-x-2">
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              <span className="text-sm text-gray-500">Loading permissions...</span>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              No permissions loaded. Click "Refresh" to load current permissions.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => fetchRoomAffiliations(roomJid)}
-                      className="w-full"
-                    >
-                      Refresh Affiliations
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -274,7 +338,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-gray-500 text-center">
-                    You must be a room owner to access advanced settings.
+                    You must be a room owner to access advanced settings and permissions.
                   </p>
                 </CardContent>
               </Card>
