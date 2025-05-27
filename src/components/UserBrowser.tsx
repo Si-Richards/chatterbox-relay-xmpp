@@ -38,10 +38,10 @@ export const UserBrowser = () => {
     setIsLoading(true);
     try {
       const users = await fetchServerUsers();
-      setServerUsers(users);
+      setServerUsers(users || []);
       toast({
         title: "Success",
-        description: `Found ${users.length} users on the server`
+        description: `Found ${users?.length || 0} users on the server`
       });
     } catch (error) {
       toast({
