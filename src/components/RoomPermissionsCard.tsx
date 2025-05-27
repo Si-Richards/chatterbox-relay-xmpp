@@ -6,9 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Crown, Shield, User, UserMinus, RefreshCw } from 'lucide-react';
+import { Crown, Shield, User, UserMinus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
+import { validateJID, validateAffiliation, sanitizeInput } from '@/utils/validation';
+import { canSetAffiliation } from '@/utils/permissions';
+import { handleXMPPError, retryOperation } from '@/utils/errorHandling';
 
 interface Affiliation {
   jid: string;
@@ -20,6 +23,7 @@ interface Affiliation {
 interface RoomWithAffiliations {
   jid: string;
   affiliations?: Affiliation[];
+  isOwner?: boolean;
 }
 
 interface RoomPermissionsCardProps {
@@ -35,16 +39,52 @@ export const RoomPermissionsCard: React.FC<RoomPermissionsCardProps> = ({
 }) => {
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedAffiliation, setSelectedAffiliation] = useState<'owner' | 'admin' | 'member' | 'none'>('member');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inputError, setInputError] = useState('');
   
-  const { setRoomAffiliation } = useXMPPStore();
+  const { setRoomAffiliation, currentUser } = useXMPPStore();
+
+  const validateInput = (userJid: string): boolean => {
+    setInputError('');
+    
+    if (!userJid.trim()) {
+      setInputError('Please enter a user JID');
+      return false;
+    }
+    
+    const sanitizedJid = sanitizeInput(userJid);
+    if (!validateJID(sanitizedJid)) {
+      setInputError('Please enter a valid JID (e.g., user@domain.com)');
+      return false;
+    }
+    
+    if (!validateAffiliation(selectedAffiliation)) {
+      setInputError('Invalid affiliation selected');
+      return false;
+    }
+    
+    if (!canSetAffiliation(room, currentUser, selectedAffiliation)) {
+      setInputError('You do not have permission to set this affiliation');
+      return false;
+    }
+    
+    return true;
+  };
 
   const handleSetAffiliation = async () => {
-    if (!selectedUser || !selectedAffiliation) return;
+    if (!validateInput(selectedUser)) return;
+    
+    const sanitizedJid = sanitizeInput(selectedUser);
+    setIsSubmitting(true);
     
     try {
-      await setRoomAffiliation(room.jid, selectedUser, selectedAffiliation);
+      await retryOperation(async () => {
+        await setRoomAffiliation(room.jid, sanitizedJid, selectedAffiliation);
+      });
+      
       setSelectedUser('');
       setSelectedAffiliation('member');
+      setInputError('');
       
       toast({
         title: "Affiliation Updated",
@@ -54,12 +94,10 @@ export const RoomPermissionsCard: React.FC<RoomPermissionsCardProps> = ({
       // Refresh affiliations after setting
       onRefreshAffiliations();
     } catch (error) {
-      console.error('RoomPermissionsCard: Failed to set affiliation:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update user affiliation",
-        variant: "destructive"
-      });
+      handleXMPPError(error, 'Failed to set affiliation');
+      setInputError('Failed to update user affiliation. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -101,27 +139,53 @@ export const RoomPermissionsCard: React.FC<RoomPermissionsCardProps> = ({
         {/* Add New Affiliation */}
         <div className="space-y-3">
           <Label className="text-sm font-medium">Add User Permission</Label>
-          <div className="flex space-x-2">
-            <Input
-              placeholder="user@domain.com"
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              className="flex-1"
-            />
-            <Select value={selectedAffiliation} onValueChange={(value: any) => setSelectedAffiliation(value)}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="owner">Owner</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="none">None</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleSetAffiliation} disabled={!selectedUser}>
-              Set
-            </Button>
+          <div className="space-y-2">
+            <div className="flex space-x-2">
+              <div className="flex-1">
+                <Input
+                  placeholder="user@domain.com"
+                  value={selectedUser}
+                  onChange={(e) => {
+                    setSelectedUser(e.target.value);
+                    setInputError('');
+                  }}
+                  className={inputError ? 'border-red-500' : ''}
+                  disabled={isSubmitting}
+                />
+                {inputError && (
+                  <div className="flex items-center mt-1 text-sm text-red-600">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {inputError}
+                  </div>
+                )}
+              </div>
+              <Select 
+                value={selectedAffiliation} 
+                onValueChange={(value: any) => setSelectedAffiliation(value)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  {room.isOwner && <SelectItem value="owner">Owner</SelectItem>}
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button 
+                onClick={handleSetAffiliation} 
+                disabled={!selectedUser || isSubmitting}
+                className="min-w-[60px]"
+              >
+                {isSubmitting ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  'Set'
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 

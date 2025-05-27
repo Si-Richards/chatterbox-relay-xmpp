@@ -23,6 +23,8 @@ import { toast } from '@/hooks/use-toast';
 import { RoomInfoCard } from './RoomInfoCard';
 import { RoomPermissionsCard } from './RoomPermissionsCard';
 import { DangerZoneCard } from './DangerZoneCard';
+import { canManageRoom, canDeleteRoom } from '@/utils/permissions';
+import { handleXMPPError, retryOperation } from '@/utils/errorHandling';
 
 interface RoomSettingsProps {
   open: boolean;
@@ -37,53 +39,73 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
 }) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isLoadingAffiliations, setIsLoadingAffiliations] = useState(false);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   
   const { 
     rooms, 
     deleteRoom, 
     fetchRoomAffiliations,
+    currentUser,
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
   const isOwner = room?.isOwner || false;
+  const canManage = room ? canManageRoom(room, currentUser) : false;
+  const canDelete = room ? canDeleteRoom(room, currentUser) : false;
 
   React.useEffect(() => {
-    if (open && roomJid && isOwner) {
+    if (open && roomJid && canManage) {
       console.log('RoomSettings: Loading affiliations for room:', roomJid);
       handleRefreshAffiliations();
     }
-  }, [open, roomJid, isOwner]);
+  }, [open, roomJid, canManage]);
 
   const handleRefreshAffiliations = async () => {
-    if (!roomJid || !isOwner) return;
+    if (!roomJid || !canManage) return;
     
     setIsLoadingAffiliations(true);
     try {
       console.log('RoomSettings: Fetching affiliations for room:', roomJid);
-      await fetchRoomAffiliations(roomJid);
+      await retryOperation(async () => {
+        await fetchRoomAffiliations(roomJid);
+      });
       console.log('RoomSettings: Affiliations fetched successfully');
     } catch (error) {
-      console.error('RoomSettings: Failed to fetch affiliations:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load room permissions",
-        variant: "destructive"
-      });
+      handleXMPPError(error, 'Failed to load room permissions');
     } finally {
       setIsLoadingAffiliations(false);
     }
   };
 
-  const handleDeleteRoom = () => {
-    deleteRoom(roomJid);
-    setDeleteDialogOpen(false);
-    onOpenChange(false);
-    
-    toast({
-      title: "Room Deleted",
-      description: "The room has been permanently deleted",
-      variant: "destructive"
-    });
+  const handleDeleteRoom = async () => {
+    if (!canDelete) {
+      toast({
+        title: "Permission Denied",
+        description: "Only room owners can delete rooms",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsDeletingRoom(true);
+    try {
+      await retryOperation(async () => {
+        deleteRoom(roomJid);
+      });
+      
+      setDeleteDialogOpen(false);
+      onOpenChange(false);
+      
+      toast({
+        title: "Room Deleted",
+        description: "The room has been permanently deleted",
+        variant: "destructive"
+      });
+    } catch (error) {
+      handleXMPPError(error, 'Failed to delete room');
+    } finally {
+      setIsDeletingRoom(false);
+    }
   };
 
   if (!room) {
@@ -91,7 +113,7 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     return null;
   }
 
-  console.log('RoomSettings: Rendering for room:', room.name, 'Affiliations:', room.affiliations);
+  console.log('RoomSettings: Rendering for room:', room.name, 'Can manage:', canManage, 'Affiliations:', room.affiliations?.length || 0);
 
   return (
     <>
@@ -108,8 +130,8 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
             {/* Room Info */}
             <RoomInfoCard room={room} isOwner={isOwner} />
 
-            {/* Room Permissions - Only show for room owners */}
-            {isOwner && (
+            {/* Room Permissions - Only show for users who can manage */}
+            {canManage && (
               <RoomPermissionsCard
                 room={room}
                 isLoadingAffiliations={isLoadingAffiliations}
@@ -117,16 +139,18 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
               />
             )}
 
-            {/* Danger Zone - Only show for room owners */}
-            {isOwner && (
-              <DangerZoneCard onDeleteClick={() => setDeleteDialogOpen(true)} />
-            )}
+            {/* Danger Zone - Show for all users but with different permissions */}
+            <DangerZoneCard 
+              onDeleteClick={() => setDeleteDialogOpen(true)}
+              roomName={room.name}
+              canDelete={canDelete}
+            />
 
-            {!isOwner && (
+            {!canManage && (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-gray-500 text-center">
-                    You must be a room owner to access advanced settings and permissions.
+                    You must be a room owner or admin to access advanced settings and permissions.
                   </p>
                 </CardContent>
               </Card>
@@ -146,12 +170,13 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeletingRoom}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteRoom}
+              disabled={isDeletingRoom}
               className="bg-red-600 hover:bg-red-700"
             >
-              Delete Room
+              {isDeletingRoom ? "Deleting..." : "Delete Room"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
