@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { client, xml } from '@xmpp/client';
@@ -33,14 +34,14 @@ interface Contact {
   lastSeen?: Date;
 }
 
-interface RoomAffiliation {
+export interface RoomAffiliation {
   jid: string;
   name: string;
   affiliation: 'owner' | 'admin' | 'member' | 'none';
   role: 'moderator' | 'participant' | 'visitor' | 'none';
 }
 
-interface Room {
+export interface Room {
   jid: string;
   name: string;
   description?: string;
