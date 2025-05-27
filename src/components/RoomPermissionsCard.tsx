@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,27 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Crown, Shield, User, UserMinus, RefreshCw, AlertTriangle } from 'lucide-react';
-import { useXMPPStore } from '@/store/xmppStore';
+import { useXMPPStore, Room, RoomAffiliation } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 import { validateJID, validateAffiliation, sanitizeInput } from '@/utils/validation';
 import { canSetAffiliation } from '@/utils/permissions';
 import { handleXMPPError, retryOperation } from '@/utils/errorHandling';
 
-interface Affiliation {
-  jid: string;
-  name?: string;
-  affiliation: string;
-  role?: string;
-}
-
-interface RoomWithAffiliations {
-  jid: string;
-  affiliations?: Affiliation[];
-  isOwner?: boolean;
-}
-
 interface RoomPermissionsCardProps {
-  room: RoomWithAffiliations;
+  room: Room;
   isLoadingAffiliations: boolean;
   onRefreshAffiliations: () => void;
 }
