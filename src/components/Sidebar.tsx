@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
@@ -173,7 +174,9 @@ export const Sidebar = () => {
       });
       return;
     }
-    joinRoom(roomJidToJoin.trim());
+    // Call joinRoom with roomJid and nickname (required parameters)
+    const nickname = currentUser.split('@')[0]; // Use username part as nickname
+    joinRoom(roomJidToJoin.trim(), nickname);
     setRoomJidToJoin('');
     setIsJoinRoomOpen(false);
   };

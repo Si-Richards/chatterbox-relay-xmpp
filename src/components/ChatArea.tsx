@@ -205,7 +205,9 @@ export const ChatArea = () => {
 
   const isFromCurrentUser = (fromJid: string) => {
     if (activeChatType === 'groupchat') {
-      return fromJid.includes(currentUser.split('@')[0]);
+      // Ensure fromJid is a string before calling split
+      const jidString = String(fromJid);
+      return jidString.includes(currentUser.split('@')[0]);
     }
     return fromJid === currentUser;
   };
@@ -467,8 +469,8 @@ export const ChatArea = () => {
         {currentMessages.map((message) => {
           const isOwn = isFromCurrentUser(message.from);
           const senderName = activeChatType === 'groupchat' 
-            ? message.from.split('/')[1] || message.from.split('@')[0]
-            : message.from.split('@')[0];
+            ? (typeof message.from === 'string' ? message.from.split('/')[1] || message.from.split('@')[0] : 'Unknown')
+            : (typeof message.from === 'string' ? message.from.split('@')[0] : 'Unknown');
 
           const messageContent = (
             <div className="flex items-start space-x-2">
