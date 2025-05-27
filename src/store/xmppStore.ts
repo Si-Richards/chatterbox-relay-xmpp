@@ -72,7 +72,7 @@ interface XMPPState {
   sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   addContact: (jid: string) => void;
-  createRoom: (roomName: string, description?: string, isPermanent?: boolean) => void;
+  createRoom: (roomName: string, description?: string, isPermanent?: boolean, privacyOptions?: any) => void;
   updateRoomDescription: (roomJid: string, description: string) => void;
   deleteRoom: (roomJid: string) => void;
   joinRoom: (roomJid: string) => void;
@@ -672,7 +672,7 @@ export const useXMPPStore = create<XMPPState>()(
         }));
       },
       
-      createRoom: (roomName: string, description?: string, isPermanent: boolean = false) => {
+      createRoom: (roomName: string, description?: string, isPermanent: boolean = false, privacyOptions?: any) => {
         const { client, currentUser } = get();
         if (!client) return;
 
@@ -683,24 +683,54 @@ export const useXMPPStore = create<XMPPState>()(
         const presence = xml('presence', { to: `${roomJid}/${nickname}` });
         client.send(presence);
 
-        // If it's a permanent room, configure it
-        if (isPermanent) {
+        // Configure the room with privacy options
+        if (isPermanent || privacyOptions) {
           setTimeout(() => {
+            const configFields = [
+              xml('field', { var: 'FORM_TYPE' },
+                xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
+              )
+            ];
+
+            // Add permanent room setting if needed
+            if (isPermanent) {
+              configFields.push(
+                xml('field', { var: 'muc#roomconfig_persistentroom' },
+                  xml('value', {}, '1')
+                )
+              );
+            }
+
+            // Add privacy settings if provided
+            if (privacyOptions) {
+              if (privacyOptions.members_only !== undefined) {
+                configFields.push(
+                  xml('field', { var: 'muc#roomconfig_membersonly' },
+                    xml('value', {}, privacyOptions.members_only ? '1' : '0')
+                  )
+                );
+              }
+              if (privacyOptions.public_list !== undefined) {
+                configFields.push(
+                  xml('field', { var: 'muc#roomconfig_publicroom' },
+                    xml('value', {}, privacyOptions.public_list ? '1' : '0')
+                  )
+                );
+              }
+              if (privacyOptions.public !== undefined) {
+                configFields.push(
+                  xml('field', { var: 'muc#roomconfig_publicroom' },
+                    xml('value', {}, privacyOptions.public ? '1' : '0')
+                  )
+                );
+              }
+            }
+
             const configForm = xml(
               'iq',
               { type: 'set', to: roomJid, id: `config-${Date.now()}` },
               xml('query', { xmlns: 'http://jabber.org/protocol/muc#owner' },
-                xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-                  xml('field', { var: 'FORM_TYPE' },
-                    xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
-                  ),
-                  xml('field', { var: 'muc#roomconfig_persistentroom' },
-                    xml('value', {}, '1')
-                  ),
-                  xml('field', { var: 'muc#roomconfig_publicroom' },
-                    xml('value', {}, '1')
-                  )
-                )
+                xml('x', { xmlns: 'jabber:x:data', type: 'submit' }, ...configFields)
               )
             );
             client.send(configForm);
@@ -725,7 +755,7 @@ export const useXMPPStore = create<XMPPState>()(
           get().fetchRoomVCard(roomJid);
         }, 2000);
       },
-
+      
       updateRoomDescription: (roomJid: string, description: string) => {
         set((state) => ({
           rooms: state.rooms.map(room => 
