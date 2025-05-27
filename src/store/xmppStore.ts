@@ -17,6 +17,7 @@ interface Message {
   type: 'chat' | 'groupchat';
   status?: 'sent' | 'delivered' | 'read';
   reactions?: MessageReaction[];
+  read?: boolean;
   fileData?: {
     name: string;
     type: string;
@@ -47,9 +48,9 @@ interface Room {
   avatar?: string;
   isPermanent: boolean;
   isOwner: boolean;
+  participants: string[];
   affiliations?: RoomAffiliation[];
   lastMessageTime?: number;
-  // Add privacy and password settings
   isPrivate?: boolean;
   isPasswordProtected?: boolean;
   membersOnly?: boolean;
@@ -67,6 +68,7 @@ interface XMPPStore {
   messages: Record<string, Message[]>;
   activeChat: string | null;
   activeChatType: 'chat' | 'groupchat' | null;
+  currentRoomJid: string | null;
   userStatus: 'online' | 'away' | 'dnd' | 'xa';
   userAvatar: string | null;
   contactSortMethod: 'newest' | 'alphabetical';
@@ -86,12 +88,14 @@ interface XMPPStore {
   inviteToRoom: (roomJid: string, userJid: string) => void;
   kickFromRoom: (roomJid: string, userJid: string) => void;
   setActiveChat: (jid: string, type: 'chat' | 'groupchat') => void;
+  setCurrentRoomJid: (jid: string | null) => void;
   setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
   setUserAvatar: (avatarUrl: string) => void;
   setRoomAvatar: (roomJid: string, avatarUrl: string) => void;
   markMessageAsDelivered: (from: string, id: string) => void;
   markMessageAsRead: (from: string, id: string) => void;
   fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
+  fetchRooms: () => void;
   handleStanza: (stanza: any) => void;
   addReaction: (chatJid: string, messageId: string, emoji: string) => void;
   fetchRoomAffiliations: (roomJid: string) => void;
@@ -123,11 +127,28 @@ export const useXMPPStore = create<XMPPStore>()(
       messages: {},
       activeChat: null,
       activeChatType: null,
+      currentRoomJid: null,
       userStatus: 'online',
       userAvatar: null,
       contactSortMethod: 'newest',
       roomSortMethod: 'newest',
       
+      setCurrentRoomJid: (jid: string | null) => {
+        set({ currentRoomJid: jid });
+      },
+
+      fetchRooms: () => {
+        const { client } = get();
+        if (!client) return;
+
+        const discoIq = xml(
+          'iq',
+          { type: 'get', to: 'conference.ejabberd.voicehost.io', id: 'disco-rooms' },
+          xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+        );
+        client.send(discoIq);
+      },
+
       handleStanza: (stanza: any) => {
         // Handle MAM result messages
         if (stanza.is('message')) {
@@ -372,7 +393,7 @@ export const useXMPPStore = create<XMPPStore>()(
               from,
               to,
               body,
-              timestamp: new Date(),
+              timestamp: new Date(), // Always create new Date object
               type: type as 'chat' | 'groupchat',
               status: 'delivered',
               fileData
@@ -523,12 +544,7 @@ export const useXMPPStore = create<XMPPStore>()(
             xmppClient.send(rosterIq);
             
             // Discover MUC rooms on the conference server
-            const discoIq = xml(
-              'iq',
-              { type: 'get', to: 'conference.ejabberd.voicehost.io', id: 'disco-rooms' },
-              xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
-            );
-            xmppClient.send(discoIq);
+            get().fetchRooms();
           });
 
           xmppClient.on('stanza', (stanza: any) => {
@@ -555,7 +571,8 @@ export const useXMPPStore = create<XMPPStore>()(
           client: null, 
           currentUser: '',
           activeChat: null,
-          activeChatType: null
+          activeChatType: null,
+          currentRoomJid: null
         });
       },
       
@@ -713,6 +730,7 @@ export const useXMPPStore = create<XMPPStore>()(
           description: description || '',
           isPermanent: isPermanent || false,
           isOwner: true,
+          participants: [],
           lastMessageTime: Date.now(),
           isPrivate: isPrivate || false,
           isPasswordProtected: !!password,
@@ -795,7 +813,15 @@ export const useXMPPStore = create<XMPPStore>()(
         client.send(presence);
 
         set((state) => ({
-          rooms: [...state.rooms, { jid: roomJid, name: roomJid.split('@')[0], participants: [], affiliations: [], avatar: null }]
+          rooms: [...state.rooms, { 
+            jid: roomJid, 
+            name: roomJid.split('@')[0], 
+            participants: [], 
+            affiliations: [], 
+            avatar: null,
+            isPermanent: true,
+            isOwner: false
+          }]
         }));
 
         // Fetch room VCard

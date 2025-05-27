@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Sheet,
@@ -10,6 +11,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { LogOut, Menu } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
@@ -76,7 +78,7 @@ export const Sidebar: React.FC = () => {
 
   const getUnreadMessagesCount = (roomJid: string) => {
     const roomMessages = messages[roomJid] || [];
-    return roomMessages.filter(msg => !msg.read && msg.from !== currentUser).length;
+    return roomMessages.filter(msg => msg.from !== currentUser).length;
   };
 
   return (
