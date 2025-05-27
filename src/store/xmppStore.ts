@@ -16,8 +16,8 @@ interface XMPPState {
   activeChat: string | null;
   activeChatType: 'chat' | 'groupchat' | null;
   userStatus: 'online' | 'offline' | 'away' | 'busy';
-  contactSortMethod: 'name' | 'status' | 'recent';
-  roomSortMethod: 'name' | 'recent' | 'participants';
+  contactSortMethod: 'newest' | 'alphabetical';
+  roomSortMethod: 'newest' | 'alphabetical';
   
   setClient: (client: any) => void;
   setCurrentUser: (currentUser: string) => void;
@@ -36,8 +36,8 @@ interface XMPPState {
   setRoomAvatar: (roomJid: string, avatar: string) => void;
   setActiveChat: (chatJid: string | null, chatType: 'chat' | 'groupchat' | null) => void;
   setUserStatus: (status: 'online' | 'offline' | 'away' | 'busy') => void;
-  setContactSortMethod: (method: 'name' | 'status' | 'recent') => void;
-  setRoomSortMethod: (method: 'name' | 'recent' | 'participants') => void;
+  setContactSortMethod: (method: 'newest' | 'alphabetical') => void;
+  setRoomSortMethod: (method: 'newest' | 'alphabetical') => void;
   
   addMessage: (chatJid: string, message: Message) => void;
   updateMessageStatus: (chatJid: string, messageId: string, status: 'sent' | 'delivered' | 'read') => void;
@@ -79,8 +79,8 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
   activeChat: null,
   activeChatType: null,
   userStatus: 'offline',
-  contactSortMethod: 'name',
-  roomSortMethod: 'name',
+  contactSortMethod: 'newest',
+  roomSortMethod: 'newest',
 
   setClient: (client) => set({ client }),
   setCurrentUser: (currentUser) => set({ currentUser }),
