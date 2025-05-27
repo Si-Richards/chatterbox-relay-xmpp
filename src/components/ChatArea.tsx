@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -468,8 +467,8 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
-          // Ensure message.from is properly typed as string
-          const messageFrom = String(message.from || '');
+          // Ensure message.from is properly typed as string with explicit type assertion
+          const messageFrom: string = message.from ? String(message.from) : '';
           const isOwn = isFromCurrentUser(messageFrom);
           const senderName = activeChatType === 'groupchat' 
             ? (messageFrom.split('/')[1] || messageFrom.split('@')[0] || 'Unknown')
