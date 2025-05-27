@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -23,7 +22,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Crown, Shield, User, UserMinus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Trash2, Crown, Shield, User, UserMinus, Lock, Eye, EyeOff, Settings } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 import { RoomAvatarSelector } from './RoomAvatarSelector';
@@ -42,13 +42,15 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedAffiliation, setSelectedAffiliation] = useState<'owner' | 'admin' | 'member' | 'none'>('member');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   const { 
     rooms, 
     deleteRoom, 
     fetchRoomAffiliations, 
     setRoomAffiliation,
-    fetchServerUsers
+    updateRoomSettings
   } = useXMPPStore();
 
   const room = rooms.find(r => r.jid === roomJid);
@@ -82,6 +84,60 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
     toast({
       title: "Affiliation Updated",
       description: `User affiliation has been set to ${selectedAffiliation}`
+    });
+  };
+
+  const handlePrivacyToggle = (isPrivate: boolean) => {
+    const settings = {
+      members_only: isPrivate,
+      members_by_default: false,
+      public_list: !isPrivate,
+      public: !isPrivate
+    };
+    
+    updateRoomSettings(roomJid, settings);
+    
+    toast({
+      title: "Privacy Updated",
+      description: `Room is now ${isPrivate ? 'private' : 'public'}`
+    });
+  };
+
+  const handlePasswordUpdate = () => {
+    if (!newPassword.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a password",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const settings = {
+      password_protected: true,
+      password: newPassword.trim()
+    };
+    
+    updateRoomSettings(roomJid, settings);
+    setNewPassword('');
+    
+    toast({
+      title: "Password Updated",
+      description: "Room password has been updated"
+    });
+  };
+
+  const handleRemovePassword = () => {
+    const settings = {
+      password_protected: false,
+      password: undefined
+    };
+    
+    updateRoomSettings(roomJid, settings);
+    
+    toast({
+      title: "Password Removed",
+      description: "Room password protection has been disabled"
     });
   };
 
@@ -158,14 +214,111 @@ export const RoomSettings: React.FC<RoomSettingsProps> = ({
                   <Label className="text-sm font-medium">Description</Label>
                   <p className="text-sm text-gray-600">{room.description || 'No description'}</p>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium">Type</Label>
-                  <p className="text-sm text-gray-600">
-                    {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
-                  </p>
+                <div className="flex space-x-4">
+                  <div>
+                    <Label className="text-sm font-medium">Type</Label>
+                    <p className="text-sm text-gray-600">
+                      {room.isPermanent ? 'Permanent Room' : 'Temporary Room'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Privacy</Label>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant={room.isPrivate ? "destructive" : "secondary"}>
+                        {room.isPrivate ? 'Private' : 'Public'}
+                      </Badge>
+                      {room.hasPassword && (
+                        <Badge variant="outline">
+                          <Lock className="w-3 h-3 mr-1" />
+                          Password Protected
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Privacy Settings */}
+            {isOwner && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center space-x-2">
+                    <Settings className="w-5 h-5" />
+                    <span>Privacy & Access</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Control who can access this room and how
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Privacy Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium">Private Room</Label>
+                      <p className="text-xs text-gray-500">
+                        Only members can join and the room won't appear in public listings
+                      </p>
+                    </div>
+                    <Checkbox
+                      checked={room.isPrivate || false}
+                      onCheckedChange={handlePrivacyToggle}
+                    />
+                  </div>
+
+                  {/* Password Protection */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium">Password Protection</Label>
+                        <p className="text-xs text-gray-500">
+                          Require a password to join this room
+                        </p>
+                      </div>
+                      {room.hasPassword && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRemovePassword}
+                        >
+                          Remove Password
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex space-x-2">
+                      <div className="relative flex-1">
+                        <Input
+                          placeholder={room.hasPassword ? "Update password" : "Set room password"}
+                          type={showPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <Button
+                        onClick={handlePasswordUpdate}
+                        disabled={!newPassword.trim()}
+                      >
+                        {room.hasPassword ? 'Update' : 'Set Password'}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Room Affiliations */}
             {isOwner && (
