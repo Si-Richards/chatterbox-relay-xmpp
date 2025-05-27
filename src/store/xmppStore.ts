@@ -31,7 +31,6 @@ interface Contact {
   presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa';
   avatar?: string;
   lastSeen?: Date;
-  chatState?: 'composing' | 'paused' | 'active' | 'inactive' | 'gone';
 }
 
 interface RoomAffiliation {
@@ -50,7 +49,6 @@ interface Room {
   isPermanent?: boolean;
   affiliations?: RoomAffiliation[];
   avatar?: string;
-  participantChatStates?: Record<string, 'composing' | 'paused' | 'active' | 'inactive' | 'gone'>;
 }
 
 interface XMPPState {
@@ -290,44 +288,6 @@ export const useXMPPStore = create<XMPPState>()(
           const body = stanza.getChildText('body');
           const id = stanza.attrs.id || Date.now().toString();
           
-          // Handle XEP-0085 Chat State Notifications
-          const chatStates = ['composing', 'paused', 'active', 'inactive', 'gone'];
-          const chatStateElement = chatStates.find(state => 
-            stanza.getChild(state, 'http://jabber.org/protocol/chatstates')
-          );
-          
-          if (chatStateElement && !body) {
-            // This is a chat state notification
-            const fromJid = from.split('/')[0];
-            const nickname = from.split('/')[1];
-            
-            if (type === 'groupchat') {
-              // Update room participant chat state
-              set((state) => ({
-                rooms: state.rooms.map(room => {
-                  if (room.jid === fromJid) {
-                    const participantChatStates = { ...room.participantChatStates } || {};
-                    if (nickname) {
-                      participantChatStates[nickname] = chatStateElement as any;
-                    }
-                    return { ...room, participantChatStates };
-                  }
-                  return room;
-                })
-              }));
-            } else {
-              // Update contact chat state
-              set((state) => ({
-                contacts: state.contacts.map(contact => 
-                  contact.jid === fromJid 
-                    ? { ...contact, chatState: chatStateElement as any }
-                    : contact
-                )
-              }));
-            }
-            return;
-          }
-          
           // Handle message receipts
           const receivedNode = stanza.getChild('received', 'urn:xmpp:receipts');
           const readNode = stanza.getChild('read', 'urn:xmpp:receipts');
@@ -394,7 +354,7 @@ export const useXMPPStore = create<XMPPState>()(
               from,
               to,
               body,
-              timestamp: new Date(), // Always create new Date object
+              timestamp: new Date(),
               type: type as 'chat' | 'groupchat',
               status: 'delivered',
               fileData
@@ -494,8 +454,8 @@ export const useXMPPStore = create<XMPPState>()(
                 contact.jid === from.split('/')[0] 
                   ? { ...contact, presence: 'offline', lastSeen: new Date() }
                   : contact
-                )
-              }));
+              )
+            }));
           }
         }
       },
@@ -708,14 +668,7 @@ export const useXMPPStore = create<XMPPState>()(
 
         // Add to contacts list
         set((state) => ({
-          contacts: [...state.contacts, { 
-            jid, 
-            name: jid.split('@')[0], 
-            presence: 'offline', 
-            avatar: null, 
-            lastSeen: new Date(),
-            chatState: 'inactive'
-          }]
+          contacts: [...state.contacts, { jid, name: jid.split('@')[0], presence: 'offline', avatar: null, lastSeen: new Date() }]
         }));
       },
       
@@ -793,8 +746,7 @@ export const useXMPPStore = create<XMPPState>()(
             isOwner: true, // Set creator as owner by default
             isPermanent,
             affiliations: [],
-            avatar: null,
-            participantChatStates: {}
+            avatar: null
           }]
         }));
 

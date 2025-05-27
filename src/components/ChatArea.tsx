@@ -8,7 +8,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { RoomSettings } from './RoomSettings';
-import { useTypingNotifications } from '@/hooks/useTypingNotifications';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -70,8 +69,6 @@ export const ChatArea = () => {
     setActiveChat
   } = useXMPPStore();
 
-  const { startTyping, stopTyping, setActive } = useTypingNotifications();
-
   // Fix duplicated messages by using a Set to track unique message IDs
   const currentMessages = activeChat ? 
     Array.from(new Map((messages[activeChat] || []).map(msg => [msg.id, msg])).values())
@@ -107,36 +104,6 @@ export const ChatArea = () => {
     return room?.isOwner || false;
   };
 
-  const getTypingIndicator = () => {
-    if (!activeChat) return null;
-    
-    if (activeChatType === 'chat') {
-      const contact = contacts.find(c => c.jid === activeChat);
-      if (contact?.chatState === 'composing') {
-        return `${contact.name} is typing...`;
-      }
-    } else {
-      const room = rooms.find(r => r.jid === activeChat);
-      if (room?.participantChatStates) {
-        const typingUsers = Object.entries(room.participantChatStates)
-          .filter(([_, state]) => state === 'composing')
-          .map(([nick, _]) => nick);
-        
-        if (typingUsers.length > 0) {
-          if (typingUsers.length === 1) {
-            return `${typingUsers[0]} is typing...`;
-          } else if (typingUsers.length === 2) {
-            return `${typingUsers.join(' and ')} are typing...`;
-          } else {
-            return `${typingUsers.slice(0, 2).join(', ')} and ${typingUsers.length - 2} others are typing...`;
-          }
-        }
-      }
-    }
-    
-    return null;
-  };
-
   const handleEditDescription = () => {
     setEditDescription(getChatDescription());
     setIsEditingDescription(true);
@@ -163,7 +130,6 @@ export const ChatArea = () => {
     e.preventDefault();
     if (!messageText.trim() || !activeChat || !activeChatType) return;
     
-    stopTyping(); // Stop typing indicator when sending message
     sendMessage(activeChat, messageText, activeChatType);
     setMessageText('');
   };
@@ -172,20 +138,6 @@ export const ChatArea = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage(e);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    if (value.length <= 1000) {
-      setMessageText(value);
-      
-      // Send typing notifications
-      if (value.length > 0) {
-        startTyping();
-      } else {
-        stopTyping();
-      }
     }
   };
 
@@ -634,13 +586,6 @@ export const ChatArea = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Typing Indicator */}
-      {getTypingIndicator() && (
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
-          <p className="text-sm text-gray-500 italic">{getTypingIndicator()}</p>
-        </div>
-      )}
-
       {/* Message Input - Fixed at bottom */}
       <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center space-x-2 mb-2">
@@ -692,7 +637,11 @@ export const ChatArea = () => {
             <Textarea
               ref={textareaRef}
               value={messageText}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                if (e.target.value.length <= 1000) {
+                  setMessageText(e.target.value);
+                }
+              }}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${getChatName()}... ${markdownEnabled ? '(Use **bold** or *italic*)' : ''}`}
               className="min-h-[40px] max-h-[120px] resize-none"
