@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { AvatarSelector } from './AvatarSelector';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users, ArrowUpDown, Clock, AlphabeticalIcon } from 'lucide-react';
+import { LogOut, Plus, Search, Hash, User, Infinity, Trash2, UserPlus, ChevronDown, ChevronRight, Users, ArrowUpDown, Clock, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -312,7 +311,7 @@ export const Sidebar = () => {
                     {contactSortMethod === 'newest' && ' ✓'}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setContactSortMethod('alphabetical')}>
-                    <AlphabeticalIcon className="h-4 w-4 mr-2" />
+                    <Type className="h-4 w-4 mr-2" />
                     Sort Alphabetically
                     {contactSortMethod === 'alphabetical' && ' ✓'}
                   </DropdownMenuItem>
@@ -380,7 +379,7 @@ export const Sidebar = () => {
                     {roomSortMethod === 'newest' && ' ✓'}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setRoomSortMethod('alphabetical')}>
-                    <AlphabeticalIcon className="h-4 w-4 mr-2" />
+                    <Type className="h-4 w-4 mr-2" />
                     Sort Alphabetically
                     {roomSortMethod === 'alphabetical' && ' ✓'}
                   </DropdownMenuItem>
