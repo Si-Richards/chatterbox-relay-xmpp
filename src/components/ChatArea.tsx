@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -467,10 +468,12 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map((message) => {
-          const isOwn = isFromCurrentUser(message.from);
+          // Ensure message.from is properly typed as string
+          const messageFrom = String(message.from || '');
+          const isOwn = isFromCurrentUser(messageFrom);
           const senderName = activeChatType === 'groupchat' 
-            ? (typeof message.from === 'string' ? message.from.split('/')[1] || message.from.split('@')[0] : 'Unknown')
-            : (typeof message.from === 'string' ? message.from.split('@')[0] : 'Unknown');
+            ? (messageFrom.split('/')[1] || messageFrom.split('@')[0] || 'Unknown')
+            : (messageFrom.split('@')[0] || 'Unknown');
 
           const messageContent = (
             <div className="flex items-start space-x-2">
@@ -548,7 +551,7 @@ export const ChatArea = () => {
               {!isOwn && (
                 <div className="mr-2 flex-shrink-0">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
+                    <AvatarImage src={getContactAvatar(messageFrom.split('/')[0])} />
                     <AvatarFallback>
                       <User className="h-4 w-4" />
                     </AvatarFallback>
