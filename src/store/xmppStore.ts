@@ -101,7 +101,6 @@ export const useXMPPStore = create<XMPPState>()(
       userStatus: 'online',
       userAvatar: null,
       
-      // Handle XMPP stanzas (messages, presence, etc.)
       handleStanza: (stanza: any) => {
         // Handle MAM result messages
         if (stanza.is('message')) {
@@ -333,11 +332,8 @@ export const useXMPPStore = create<XMPPState>()(
                 title: "New Message",
                 description: `${senderName}: ${body.length > 50 ? body.substring(0, 50) + '...' : body}`,
                 duration: 4000,
-                action: {
-                  altText: "Open chat",
-                  onClick: () => {
-                    get().setActiveChat(chatJid, type as 'chat' | 'groupchat');
-                  }
+                onClick: () => {
+                  get().setActiveChat(chatJid, type as 'chat' | 'groupchat');
                 }
               });
             }
