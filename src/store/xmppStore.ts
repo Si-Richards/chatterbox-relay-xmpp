@@ -63,6 +63,11 @@ interface XMPPState {
   clearTypingState: (chatJid: string, userJid: string) => void;
   sendChatState: (to: string, state: 'composing' | 'paused' | 'active', chatType: 'chat' | 'groupchat') => void;
   setCurrentUserTyping: (chatJid: string, isTyping: boolean) => void;
+  
+  // New methods for proper XMPP functionality
+  requestRoster: () => void;
+  discoverServices: () => void;
+  discoverRooms: (mucService: string) => void;
 }
 
 export const useXMPPStore = create<XMPPState>((set, get) => ({
@@ -652,5 +657,21 @@ export const useXMPPStore = create<XMPPState>((set, get) => ({
         },
       };
     });
+  },
+
+  // New methods for proper XMPP functionality
+  requestRoster: () => {
+    // Placeholder implementation - this would need to be implemented with actual XMPP roster request logic
+    console.log('Requesting roster...');
+  },
+
+  discoverServices: () => {
+    // Placeholder implementation - this would need to be implemented with actual XMPP service discovery logic
+    console.log('Discovering services...');
+  },
+
+  discoverRooms: (mucService: string) => {
+    // Placeholder implementation - this would need to be implemented with actual XMPP room discovery logic
+    console.log(`Discovering rooms on service: ${mucService}`);
   },
 }));
