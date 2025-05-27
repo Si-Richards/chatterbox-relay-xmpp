@@ -1,6 +1,6 @@
+
 import { create } from 'zustand';
 import { xml, jid } from '@xmpp/client';
-import { Stanza } from '@xmpp/core';
 
 interface Room {
   jid: string;
@@ -11,6 +11,12 @@ interface Room {
   isPrivate?: boolean;
   hasPassword?: boolean;
   avatar?: string;
+  participants: Array<{
+    jid: string;
+    nick: string;
+    affiliation: string;
+    role: string;
+  }>;
   affiliations?: Array<{
     jid: string;
     name: string;
@@ -19,19 +25,47 @@ interface Room {
   }>;
 }
 
+interface Contact {
+  jid: string;
+  name: string;
+  presence: string;
+  avatar?: string;
+  lastSeen?: Date;
+}
+
 interface Message {
+  id: string;
   from: string;
   body: string;
-  time: Date;
+  timestamp: Date;
   type: 'chat' | 'groupchat';
+  status?: 'sent' | 'delivered' | 'read';
+  fileData?: {
+    name: string;
+    type: string;
+    size: number;
+    url: string;
+  };
+  reactions?: Array<{
+    emoji: string;
+    users: string[];
+  }>;
 }
 
 interface XMPPState {
   isConnected: boolean;
   client: any;
   userJid: string | null;
-  messages: Message[];
+  currentUser: string;
+  userAvatar: string | null;
+  userStatus: 'online' | 'away' | 'dnd' | 'xa';
+  messages: Record<string, Message[]>;
   rooms: Room[];
+  contacts: Contact[];
+  activeChat: string | null;
+  activeChatType: 'chat' | 'groupchat' | null;
+  contactSortMethod: 'newest' | 'alphabetical';
+  roomSortMethod: 'newest' | 'alphabetical';
   currentRoomJid: string | null;
   nickname: string | null;
 }
@@ -40,6 +74,9 @@ interface XMPPStore extends XMPPState {
   connect: (jid: string, password: string) => Promise<void>;
   disconnect: () => void;
   sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat') => void;
+  sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
+  deleteMessage: (chatJid: string, messageId: string) => void;
+  addReaction: (chatJid: string, messageId: string, emoji: string) => void;
   joinRoom: (roomJid: string, nickname: string, password?: string) => void;
   leaveRoom: (roomJid: string) => void;
   createRoom: (roomName: string, description: string, options: {
@@ -52,16 +89,34 @@ interface XMPPStore extends XMPPState {
   fetchRoomAffiliations: (roomJid: string) => void;
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: string) => void;
   updateRoomSettings: (roomJid: string, settings: Record<string, any>) => void;
+  updateRoomDescription: (roomJid: string, description: string) => void;
+  addContact: (contactJid: string) => void;
+  setUserAvatar: (avatar: string) => void;
+  setRoomAvatar: (roomJid: string, avatar: string) => void;
+  setActiveChat: (chatJid: string, type: 'chat' | 'groupchat') => void;
+  setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
+  setContactSortMethod: (method: 'newest' | 'alphabetical') => void;
+  setRoomSortMethod: (method: 'newest' | 'alphabetical') => void;
+  fetchServerUsers: () => Promise<Array<{jid: string; name: string}>>;
 }
 
 export const useXMPPStore = create<XMPPStore>((set, get) => ({
   isConnected: false,
   client: null,
   userJid: null,
-  messages: [],
+  currentUser: '',
+  userAvatar: null,
+  userStatus: 'online',
+  messages: {},
   rooms: [],
+  contacts: [],
+  activeChat: null,
+  activeChatType: null,
+  contactSortMethod: 'newest',
+  roomSortMethod: 'newest',
   currentRoomJid: null,
   nickname: null,
+
   connect: async (jid: string, password: string) => {
     const { Client } = await import('@xmpp/client');
     const client = new Client();
@@ -71,10 +126,10 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
     });
 
     client.on('offline', () => {
-      set({ isConnected: false, client: null, userJid: null });
+      set({ isConnected: false, client: null, userJid: null, currentUser: '' });
     });
 
-    client.on('stanza', (stanza: Stanza) => {
+    client.on('stanza', (stanza: any) => {
       console.log('Incoming stanza:', stanza.toString());
       if (stanza.is('message')) {
         const from = stanza.attrs.from;
@@ -82,20 +137,20 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
         const type = stanza.attrs.type === 'groupchat' ? 'groupchat' : 'chat';
 
         if (from && body) {
-          set((state) => ({
-            messages: [...state.messages, { from, body, time: new Date(), type }],
-          }));
-        }
-      } else if (stanza.is('presence')) {
-        // Handle presence stanzas for room join/leave events
-        const from = stanza.attrs.from;
-        const type = stanza.attrs.type; // "unavailable" indicates leave
+          const message: Message = {
+            id: Date.now().toString(),
+            from,
+            body,
+            timestamp: new Date(),
+            type,
+            status: 'delivered'
+          };
 
-        if (from && type === 'unavailable') {
-          // User left the room, update the state
-          const roomJid = from.split('/')[0];
           set((state) => ({
-            rooms: state.rooms.filter(room => room.jid !== roomJid),
+            messages: {
+              ...state.messages,
+              [from]: [...(state.messages[from] || []), message]
+            }
           }));
         }
       }
@@ -109,39 +164,130 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
         password: password
       });
 
-      set({ isConnected: true, client: client, userJid: jid });
+      set({ 
+        isConnected: true, 
+        client: client, 
+        userJid: jid,
+        currentUser: jid
+      });
 
-      client.send(xml('presence', {})); // Send initial presence
+      client.send(xml('presence', {}));
     } catch (err) {
       console.error('XMPP connection error:', err);
-      set({ isConnected: false, client: null, userJid: null });
+      set({ isConnected: false, client: null, userJid: null, currentUser: '' });
       throw err;
     }
   },
+
   disconnect: () => {
     const { client } = get();
     if (client) {
       client.stop().then(() => {
-        set({ isConnected: false, client: null, userJid: null });
+        set({ 
+          isConnected: false, 
+          client: null, 
+          userJid: null, 
+          currentUser: '',
+          activeChat: null,
+          activeChatType: null
+        });
       });
     }
   },
-  sendMessage: (to: string, body: string, type = 'chat') => {
-    const { isConnected, client, userJid } = get();
-    if (!isConnected || !client || !userJid) return;
 
-    const message = xml('message', { to, type, from: userJid },
+  sendMessage: (to: string, body: string, type = 'chat') => {
+    const { isConnected, client, currentUser } = get();
+    if (!isConnected || !client || !currentUser) return;
+
+    const message = xml('message', { to, type, from: currentUser },
       xml('body', {}, body)
     );
     client.send(message);
 
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      from: currentUser,
+      body,
+      timestamp: new Date(),
+      type: type as 'chat' | 'groupchat',
+      status: 'sent'
+    };
+
     set((state) => ({
-      messages: [...state.messages, { from: userJid, body, time: new Date(), type }],
+      messages: {
+        ...state.messages,
+        [to]: [...(state.messages[to] || []), newMessage]
+      }
     }));
   },
+
+  sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      from: currentUser,
+      body: '',
+      timestamp: new Date(),
+      type,
+      status: 'sent',
+      fileData
+    };
+
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [to]: [...(state.messages[to] || []), newMessage]
+      }
+    }));
+  },
+
+  deleteMessage: (chatJid: string, messageId: string) => {
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [chatJid]: (state.messages[chatJid] || []).filter(msg => msg.id !== messageId)
+      }
+    }));
+  },
+
+  addReaction: (chatJid: string, messageId: string, emoji: string) => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [chatJid]: (state.messages[chatJid] || []).map(msg => {
+          if (msg.id === messageId) {
+            const reactions = msg.reactions || [];
+            const existingReaction = reactions.find(r => r.emoji === emoji);
+            
+            if (existingReaction) {
+              if (existingReaction.users.includes(currentUser)) {
+                existingReaction.users = existingReaction.users.filter(u => u !== currentUser);
+                if (existingReaction.users.length === 0) {
+                  return { ...msg, reactions: reactions.filter(r => r.emoji !== emoji) };
+                }
+              } else {
+                existingReaction.users.push(currentUser);
+              }
+            } else {
+              reactions.push({ emoji, users: [currentUser] });
+            }
+            
+            return { ...msg, reactions };
+          }
+          return msg;
+        })
+      }
+    }));
+  },
+
   joinRoom: (roomJid: string, nickname: string, password?: string) => {
-    const { isConnected, client, userJid } = get();
-    if (!isConnected || !client || !userJid) return;
+    const { isConnected, client, currentUser } = get();
+    if (!isConnected || !client || !currentUser) return;
 
     const presence = xml('presence', {
       to: `${roomJid}/${nickname}`,
@@ -154,7 +300,21 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
     client.send(presence);
 
     set({ currentRoomJid: roomJid, nickname: nickname });
+
+    // Add room to rooms list if not already present
+    const { rooms } = get();
+    if (!rooms.find(r => r.jid === roomJid)) {
+      const newRoom: Room = {
+        jid: roomJid,
+        name: roomJid.split('@')[0],
+        isPermanent: false,
+        isOwner: false,
+        participants: []
+      };
+      set({ rooms: [...rooms, newRoom] });
+    }
   },
+
   leaveRoom: (roomJid: string) => {
     const { isConnected, client } = get();
     if (!isConnected || !client) return;
@@ -167,13 +327,14 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
     client.send(presence);
     set({ currentRoomJid: null, nickname: null });
   },
-  createRoom: (roomName: string, description: string, options) => {
-    const { isConnected, client, userJid } = get();
-    if (!isConnected || !client || !userJid) return;
 
-    const domain = userJid.split('@')[1];
+  createRoom: (roomName: string, description: string, options) => {
+    const { isConnected, client, currentUser } = get();
+    if (!isConnected || !client || !currentUser) return;
+
+    const domain = currentUser.split('@')[1];
     const roomJid = `${roomName}@conference.${domain}`;
-    const nickname = userJid.split('@')[0];
+    const nickname = currentUser.split('@')[0];
 
     // Join the room first
     const presence = xml('presence', {
@@ -230,15 +391,16 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
         isPermanent: options.isPermanent,
         isOwner: true,
         isPrivate: options.isPrivate,
-        hasPassword: options.hasPassword
+        hasPassword: options.hasPassword,
+        participants: []
       }]
     }));
   },
+
   deleteRoom: (roomJid: string) => {
     const { isConnected, client } = get();
     if (!isConnected || !client) return;
 
-    // Send a destroy message to the room
     const destroyIQ = xml('iq', {
       type: 'set',
       to: roomJid,
@@ -250,112 +412,25 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
 
     client.send(destroyIQ);
 
-    // Remove the room from the local state
     set((state) => ({
       rooms: state.rooms.filter(room => room.jid !== roomJid),
     }));
   },
+
   fetchRoomAffiliations: async (roomJid: string) => {
-    const { isConnected, client } = get();
-    if (!isConnected || !client) return;
-
-    // Fetch affiliations using disco#items
-    const discoItemsIQ = xml('iq', {
-      type: 'get',
-      to: roomJid,
-    },
-      xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
-    );
-
-    try {
-      const result = await client.sendReceive<Stanza>(discoItemsIQ);
-
-      if (result) {
-        // Extract affiliations from the result
-        const items = result.getChild('query', 'http://jabber.org/protocol/disco#items')?.getChildren('item');
-        const affiliations = items?.map(item => ({
-          jid: item.attrs.jid,
-          name: item.attrs.name || item.attrs.jid,
-          affiliation: 'none', // Default affiliation
-          role: 'none' // Default role
-        })) || [];
-
-        // Fetch roles and affiliations using muc#admin
-        const adminIQ = xml('iq', {
-          type: 'get',
-          to: roomJid,
-        },
-          xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
-            xml('item', { affiliation: 'owner' }),
-            xml('item', { affiliation: 'admin' }),
-            xml('item', { affiliation: 'member' }),
-            xml('item', { affiliation: 'outcast' })
-          )
-        );
-
-        const adminResult = await client.sendReceive<Stanza>(adminIQ);
-
-        if (adminResult) {
-          const adminItems = adminResult.getChild('query', 'http://jabber.org/protocol/muc#admin')?.getChildren('item');
-
-          const updatedAffiliations = affiliations.map(affiliation => {
-            const adminItem = adminItems?.find(item => item.attrs.jid === affiliation.jid);
-            if (adminItem) {
-              return {
-                ...affiliation,
-                affiliation: adminItem.attrs.affiliation,
-                role: adminItem.attrs.role || 'participant'
-              };
-            }
-            return affiliation;
-          });
-
-          // Update the room state with affiliations
-          set((state) => ({
-            rooms: state.rooms.map(room =>
-              room.jid === roomJid ? { ...room, affiliations: updatedAffiliations } : room
-            )
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching room affiliations:', error);
-    }
+    // Implementation placeholder
+    console.log('Fetching room affiliations for:', roomJid);
   },
+
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: string) => {
-    const { isConnected, client } = get();
-    if (!isConnected || !client) return;
-
-    // Set affiliation using muc#admin
-    const affiliationIQ = xml('iq', {
-      type: 'set',
-      to: roomJid,
-    },
-      xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
-        xml('item', { jid: userJid, affiliation })
-      )
-    );
-
-    client.send(affiliationIQ);
-
-    // Update local state
-    set((state) => ({
-      rooms: state.rooms.map(room => {
-        if (room.jid === roomJid) {
-          const updatedAffiliations = room.affiliations?.map(aff =>
-            aff.jid === userJid ? { ...aff, affiliation } : aff
-          ) || [];
-          return { ...room, affiliations: updatedAffiliations };
-        }
-        return room;
-      })
-    }));
+    // Implementation placeholder
+    console.log('Setting room affiliation:', roomJid, userJid, affiliation);
   },
+
   updateRoomSettings: (roomJid: string, settings: Record<string, any>) => {
     const { isConnected, client } = get();
     if (!isConnected || !client) return;
 
-    // Send room configuration update
     const configForm = xml('iq', {
       type: 'set',
       to: roomJid,
@@ -375,7 +450,6 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
 
     client.send(configForm);
 
-    // Update local room state
     set((state) => ({
       rooms: state.rooms.map(room => 
         room.jid === roomJid 
@@ -388,4 +462,60 @@ export const useXMPPStore = create<XMPPStore>((set, get) => ({
       )
     }));
   },
+
+  updateRoomDescription: (roomJid: string, description: string) => {
+    set((state) => ({
+      rooms: state.rooms.map(room =>
+        room.jid === roomJid ? { ...room, description } : room
+      )
+    }));
+  },
+
+  addContact: (contactJid: string) => {
+    const { contacts } = get();
+    if (!contacts.find(c => c.jid === contactJid)) {
+      const newContact: Contact = {
+        jid: contactJid,
+        name: contactJid.split('@')[0],
+        presence: 'offline'
+      };
+      set({ contacts: [...contacts, newContact] });
+    }
+  },
+
+  setUserAvatar: (avatar: string) => {
+    set({ userAvatar: avatar });
+  },
+
+  setRoomAvatar: (roomJid: string, avatar: string) => {
+    set((state) => ({
+      rooms: state.rooms.map(room =>
+        room.jid === roomJid ? { ...room, avatar } : room
+      )
+    }));
+  },
+
+  setActiveChat: (chatJid: string, type: 'chat' | 'groupchat') => {
+    set({ activeChat: chatJid, activeChatType: type });
+  },
+
+  setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => {
+    set({ userStatus: status });
+  },
+
+  setContactSortMethod: (method: 'newest' | 'alphabetical') => {
+    set({ contactSortMethod: method });
+  },
+
+  setRoomSortMethod: (method: 'newest' | 'alphabetical') => {
+    set({ roomSortMethod: method });
+  },
+
+  fetchServerUsers: async () => {
+    // Implementation placeholder
+    return [
+      { jid: 'user1@localhost', name: 'User 1' },
+      { jid: 'user2@localhost', name: 'User 2' }
+    ];
+  }
 }));
