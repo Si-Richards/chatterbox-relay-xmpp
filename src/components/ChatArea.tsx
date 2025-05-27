@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { RoomSettings } from './RoomSettings';
+import { TypingIndicator } from './TypingIndicator';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -27,6 +28,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useXMPPStore } from '@/store/xmppStore';
+import { useTyping } from '@/hooks/useTyping';
 import { toast } from '@/hooks/use-toast';
 
 // Simple markdown parser for basic formatting
@@ -68,6 +70,12 @@ export const ChatArea = () => {
     userAvatar,
     setActiveChat
   } = useXMPPStore();
+
+  // Initialize typing hook
+  const { startTyping, stopTyping } = useTyping({
+    chatJid: activeChat || '',
+    chatType: activeChatType || 'chat'
+  });
 
   // Fix duplicated messages by using a Set to track unique message IDs
   const currentMessages = activeChat ? 
@@ -130,6 +138,7 @@ export const ChatArea = () => {
     e.preventDefault();
     if (!messageText.trim() || !activeChat || !activeChatType) return;
     
+    stopTyping(); // Stop typing when sending message
     sendMessage(activeChat, messageText, activeChatType);
     setMessageText('');
   };
@@ -138,6 +147,20 @@ export const ChatArea = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage(e);
+    }
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    if (newText.length <= 1000) {
+      setMessageText(newText);
+      
+      // Handle typing notifications
+      if (newText.trim() && activeChat && activeChatType) {
+        startTyping();
+      } else if (!newText.trim()) {
+        stopTyping();
+      }
     }
   };
 
@@ -586,6 +609,11 @@ export const ChatArea = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Typing Indicator */}
+      {activeChat && activeChatType && (
+        <TypingIndicator chatJid={activeChat} chatType={activeChatType} />
+      )}
+
       {/* Message Input - Fixed at bottom */}
       <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center space-x-2 mb-2">
@@ -637,11 +665,7 @@ export const ChatArea = () => {
             <Textarea
               ref={textareaRef}
               value={messageText}
-              onChange={(e) => {
-                if (e.target.value.length <= 1000) {
-                  setMessageText(e.target.value);
-                }
-              }}
+              onChange={handleTextChange}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${getChatName()}... ${markdownEnabled ? '(Use **bold** or *italic*)' : ''}`}
               className="min-h-[40px] max-h-[120px] resize-none"

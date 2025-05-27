@@ -51,6 +51,13 @@ interface Room {
   avatar?: string;
 }
 
+interface TypingState {
+  user: string;
+  chatJid: string;
+  timestamp: Date;
+  state: 'composing' | 'paused';
+}
+
 interface XMPPState {
   client: any;
   isConnected: boolean;
@@ -64,6 +71,8 @@ interface XMPPState {
   userAvatar: string | null;
   contactSortMethod: 'newest' | 'alphabetical';
   roomSortMethod: 'newest' | 'alphabetical';
+  typingStates: Record<string, TypingState[]>;
+  currentUserTyping: Record<string, boolean>;
   
   // Actions
   connect: (username: string, password: string) => Promise<void>;
@@ -92,6 +101,10 @@ interface XMPPState {
   fetchRoomVCard: (roomJid: string) => void;
   setContactSortMethod: (method: 'newest' | 'alphabetical') => void;
   setRoomSortMethod: (method: 'newest' | 'alphabetical') => void;
+  sendChatState: (to: string, state: 'composing' | 'active' | 'paused' | 'inactive' | 'gone', type: 'chat' | 'groupchat') => void;
+  setChatState: (chatJid: string, userJid: string, state: 'composing' | 'paused') => void;
+  clearTypingState: (chatJid: string, userJid?: string) => void;
+  setCurrentUserTyping: (chatJid: string, isTyping: boolean) => void;
 }
 
 export const useXMPPStore = create<XMPPState>()(
@@ -109,6 +122,8 @@ export const useXMPPStore = create<XMPPState>()(
       userAvatar: null,
       contactSortMethod: 'newest',
       roomSortMethod: 'newest',
+      typingStates: {},
+      currentUserTyping: {},
       
       handleStanza: (stanza: any) => {
         // Handle MAM result messages
@@ -288,6 +303,37 @@ export const useXMPPStore = create<XMPPState>()(
           const body = stanza.getChildText('body');
           const id = stanza.attrs.id || Date.now().toString();
           
+          // Handle chat state notifications (XEP-0085)
+          const composing = stanza.getChild('composing', 'http://jabber.org/protocol/chatstates');
+          const active = stanza.getChild('active', 'http://jabber.org/protocol/chatstates');
+          const paused = stanza.getChild('paused', 'http://jabber.org/protocol/chatstates');
+          const inactive = stanza.getChild('inactive', 'http://jabber.org/protocol/chatstates');
+          const gone = stanza.getChild('gone', 'http://jabber.org/protocol/chatstates');
+          
+          if (composing || paused) {
+            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const userJid = type === 'groupchat' ? from : from.split('/')[0];
+            const state = composing ? 'composing' : 'paused';
+            
+            // Don't show typing for current user
+            const { currentUser } = get();
+            const isCurrentUser = type === 'groupchat' 
+              ? from.includes(currentUser.split('@')[0])
+              : from.split('/')[0] === currentUser;
+            
+            if (!isCurrentUser) {
+              get().setChatState(chatJid, userJid, state);
+            }
+            return;
+          }
+          
+          if (active || inactive || gone) {
+            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const userJid = type === 'groupchat' ? from : from.split('/')[0];
+            get().clearTypingState(chatJid, userJid);
+            return;
+          }
+
           // Handle message receipts
           const receivedNode = stanza.getChild('received', 'urn:xmpp:receipts');
           const readNode = stanza.getChild('read', 'urn:xmpp:receipts');
@@ -326,6 +372,11 @@ export const useXMPPStore = create<XMPPState>()(
           
           // Handle incoming message with body
           if (body) {
+            // Clear typing state when message is received
+            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+            const userJid = type === 'groupchat' ? from : from.split('/')[0];
+            get().clearTypingState(chatJid, userJid);
+            
             // Send receipt for received message
             const { client } = get();
             if (client && stanza.getChild('request', 'urn:xmpp:receipts')) {
@@ -360,7 +411,6 @@ export const useXMPPStore = create<XMPPState>()(
               fileData
             };
             
-            const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const { currentUser, activeChat } = get();
             
             // Show toast notification for new messages (except from current user)
@@ -515,9 +565,7 @@ export const useXMPPStore = create<XMPPState>()(
 
           xmppClient.on('stanza', (stanza: any) => {
             const { handleStanza } = get();
-            if (handleStanza) {
-              handleStanza(stanza);
-            }
+            handleStanza(stanza);
           });
 
           await xmppClient.start();
@@ -537,7 +585,9 @@ export const useXMPPStore = create<XMPPState>()(
           client: null, 
           currentUser: '',
           activeChat: null,
-          activeChatType: null
+          activeChatType: null,
+          typingStates: {},
+          currentUserTyping: {}
         });
       },
       
@@ -550,10 +600,15 @@ export const useXMPPStore = create<XMPPState>()(
           'message',
           { to, type, id: messageId },
           xml('body', {}, body.trim()),
-          xml('request', { xmlns: 'urn:xmpp:receipts' }) // Add XEP-0184 request
+          xml('request', { xmlns: 'urn:xmpp:receipts' }), // Add XEP-0184 request
+          xml('active', { xmlns: 'http://jabber.org/protocol/chatstates' }) // Send active state
         );
 
         client.send(message);
+
+        // Clear typing state for current user
+        const chatJid = type === 'groupchat' ? to : to.split('/')[0];
+        get().setCurrentUserTyping(chatJid, false);
 
         // Add to local messages
         const newMessage: Message = {
@@ -1298,6 +1353,70 @@ export const useXMPPStore = create<XMPPState>()(
       // Set room sorting method  
       setRoomSortMethod: (method: 'newest' | 'alphabetical') => {
         set({ roomSortMethod: method });
+      },
+
+      sendChatState: (to: string, state: 'composing' | 'active' | 'paused' | 'inactive' | 'gone', type: 'chat' | 'groupchat') => {
+        const { client } = get();
+        if (!client) return;
+
+        const stateMessage = xml(
+          'message',
+          { to, type, id: `state-${Date.now()}` },
+          xml(state, { xmlns: 'http://jabber.org/protocol/chatstates' })
+        );
+
+        client.send(stateMessage);
+      },
+
+      setChatState: (chatJid: string, userJid: string, state: 'composing' | 'paused') => {
+        set((prevState) => {
+          const currentStates = prevState.typingStates[chatJid] || [];
+          const filteredStates = currentStates.filter(s => s.user !== userJid);
+          
+          const newState: TypingState = {
+            user: userJid,
+            chatJid,
+            timestamp: new Date(),
+            state
+          };
+
+          return {
+            typingStates: {
+              ...prevState.typingStates,
+              [chatJid]: [...filteredStates, newState]
+            }
+          };
+        });
+
+        // Auto-clear typing state after 10 seconds
+        setTimeout(() => {
+          get().clearTypingState(chatJid, userJid);
+        }, 10000);
+      },
+
+      clearTypingState: (chatJid: string, userJid?: string) => {
+        set((state) => {
+          const currentStates = state.typingStates[chatJid] || [];
+          const filteredStates = userJid 
+            ? currentStates.filter(s => s.user !== userJid)
+            : [];
+
+          return {
+            typingStates: {
+              ...state.typingStates,
+              [chatJid]: filteredStates
+            }
+          };
+        });
+      },
+
+      setCurrentUserTyping: (chatJid: string, isTyping: boolean) => {
+        set((state) => ({
+          currentUserTyping: {
+            ...state.currentUserTyping,
+            [chatJid]: isTyping
+          }
+        }));
       }
     }),
     {
