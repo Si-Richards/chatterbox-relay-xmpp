@@ -11,20 +11,30 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
   const { typingStates, contacts, currentUser } = useXMPPStore();
   
   const currentTyping = typingStates[chatJid] || [];
+  
   const activeTyping = currentTyping.filter(state => {
     // Filter out expired typing states (older than 10 seconds)
     const isRecent = Date.now() - state.timestamp.getTime() < 10000;
     
     // Filter out current user's typing
+    const currentUserBareJid = currentUser.split('/')[0];
     let isCurrentUser = false;
+    
     if (chatType === 'groupchat') {
-      // For group chats, check if the full JID contains current user's nickname
+      // For group chats, state.user is the full JID (room@domain/nickname)
+      const typingUserBareJid = state.user.split('/')[0];
+      const typingUserNickname = state.user.split('/')[1];
       const currentUserNickname = currentUser.split('@')[0];
-      isCurrentUser = state.user.includes(`/${currentUserNickname}`);
+      
+      // Check if this is the current user by comparing nickname or bare JID
+      isCurrentUser = typingUserBareJid === currentUserBareJid || 
+                      typingUserNickname === currentUserNickname;
     } else {
-      // For direct chats, check if the base JID matches current user
-      isCurrentUser = state.user.split('/')[0] === currentUser.split('/')[0];
+      // For direct chats, state.user is the bare JID
+      isCurrentUser = state.user === currentUserBareJid;
     }
+    
+    console.log(`Typing filter: user=${state.user}, current=${currentUser}, isCurrentUser=${isCurrentUser}, isRecent=${isRecent}, state=${state.state}`);
     
     return state.state === 'composing' && isRecent && !isCurrentUser;
   });
@@ -44,9 +54,8 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
       return userJid.split('@')[0];
     } else {
       // For direct chats, find contact name or use username
-      const contactJid = userJid.split('/')[0]; // Remove resource if present
-      const contact = contacts.find(c => c.jid === contactJid);
-      return contact?.name || contactJid.split('@')[0];
+      const contact = contacts.find(c => c.jid === userJid);
+      return contact?.name || userJid.split('@')[0];
     }
   };
 

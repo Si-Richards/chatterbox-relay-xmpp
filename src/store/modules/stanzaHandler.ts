@@ -25,8 +25,28 @@ const handleMessageStanza = (stanza: any, set: any, get: any) => {
   const chatStates = ['active', 'composing', 'paused', 'inactive', 'gone'];
   for (const state of chatStates) {
     if (stanza.getChild(state, 'http://jabber.org/protocol/chatstates')) {
-      const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-      const userJid = type === 'groupchat' ? from : from.split('/')[0];
+      let chatJid: string;
+      let userJid: string;
+      
+      if (type === 'groupchat') {
+        // For group chats: chatJid is room@domain, userJid is full JID with resource
+        chatJid = from.split('/')[0];
+        userJid = from; // Keep full JID for group chats
+      } else {
+        // For direct chats: chatJid is sender's bare JID, userJid is sender's bare JID
+        chatJid = from.split('/')[0];
+        userJid = from.split('/')[0];
+      }
+      
+      // Don't process typing states from current user
+      const currentUserBareJid = currentUser.split('/')[0];
+      const senderBareJid = from.split('/')[0];
+      
+      if (senderBareJid === currentUserBareJid) {
+        return; // Skip own typing states
+      }
+      
+      console.log(`Processing chat state: ${state} from ${userJid} in ${chatJid} (type: ${type})`);
       
       if (state === 'composing') {
         setChatState(chatJid, userJid, 'composing');
@@ -110,7 +130,8 @@ const handleMessageStanza = (stanza: any, set: any, get: any) => {
     }
 
     // Clear typing state for sender
-    clearTypingState(chatJid, from);
+    const senderJid = type === 'groupchat' ? from : from.split('/')[0];
+    clearTypingState(chatJid, senderJid);
   }
 };
 

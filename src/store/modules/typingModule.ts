@@ -40,6 +40,7 @@ export const createTypingModule = (set: any, get: any) => ({
       };
     });
 
+    // Auto-clear typing state after 10 seconds
     setTimeout(() => {
       get().clearTypingState(chatJid, userJid);
     }, 10000);
@@ -64,6 +65,7 @@ export const createTypingModule = (set: any, get: any) => ({
   },
 
   setCurrentUserTyping: (chatJid: string, isTyping: boolean) => {
+    console.log(`Setting current user typing state: ${chatJid} = ${isTyping}`);
     set((state: any) => ({
       currentUserTyping: {
         ...state.currentUserTyping,
