@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +29,7 @@ export const CreatePollDialog: React.FC<CreatePollDialogProps> = ({
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultipleChoice, setAllowMultipleChoice] = useState(false);
-  const [duration, setDuration] = useState('');
+  const [duration, setDuration] = useState('none');
 
   const addOption = () => {
     if (options.length < 10) {
@@ -71,7 +70,7 @@ export const CreatePollDialog: React.FC<CreatePollDialogProps> = ({
     }
 
     let expiresAt: Date | undefined;
-    if (duration) {
+    if (duration && duration !== 'none') {
       const now = new Date();
       switch (duration) {
         case '1h':
@@ -102,7 +101,7 @@ export const CreatePollDialog: React.FC<CreatePollDialogProps> = ({
     setOptions(['', '']);
     setIsAnonymous(false);
     setAllowMultipleChoice(false);
-    setDuration('');
+    setDuration('none');
     setIsOpen(false);
 
     toast({
@@ -200,7 +199,7 @@ export const CreatePollDialog: React.FC<CreatePollDialogProps> = ({
                   <SelectValue placeholder="No expiration" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No expiration</SelectItem>
+                  <SelectItem value="none">No expiration</SelectItem>
                   <SelectItem value="1h">1 hour</SelectItem>
                   <SelectItem value="6h">6 hours</SelectItem>
                   <SelectItem value="1d">1 day</SelectItem>
