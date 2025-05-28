@@ -1,6 +1,6 @@
 
 import { xml } from '@xmpp/client';
-import { Message, Contact, Room } from '../../types';
+import { Message, Contact, Room, PollData } from '../../types';
 
 export const handleMessageStanza = (stanza: any, set: any, get: any) => {
   const { currentUser, markMessageAsDelivered, setChatState, clearTypingState, showMessageNotification } = get();
@@ -9,6 +9,86 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
   const type = stanza.attrs.type || 'chat';
   const id = stanza.attrs.id;
   const body = stanza.getChildText('body');
+
+  // Handle poll votes
+  const pollVote = stanza.getChild('poll-vote', 'urn:xmpp:poll');
+  if (pollVote) {
+    const messageId = pollVote.attrs.messageId;
+    const pollId = pollVote.attrs.pollId;
+    const voter = pollVote.attrs.voter;
+    const optionIds = pollVote.getChildren('option').map((opt: any) => opt.attrs.id);
+    
+    const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+    
+    set((state: any) => {
+      const chatMessages = state.messages[chatJid] || [];
+      const updatedMessages = chatMessages.map((msg: Message) => {
+        if (msg.id === messageId && msg.pollData) {
+          const updatedPoll = { ...msg.pollData };
+          
+          // Remove voter's previous votes
+          updatedPoll.options = updatedPoll.options.map(opt => ({
+            ...opt,
+            votes: opt.votes.filter(v => v !== voter)
+          }));
+          
+          // Add new votes
+          updatedPoll.options = updatedPoll.options.map(opt => ({
+            ...opt,
+            votes: optionIds.includes(opt.id) 
+              ? [...opt.votes, voter]
+              : opt.votes
+          }));
+          
+          // Recalculate total votes
+          const allVoters = new Set();
+          updatedPoll.options.forEach(opt => {
+            opt.votes.forEach(v => allVoters.add(v));
+          });
+          updatedPoll.totalVotes = allVoters.size;
+          
+          return { ...msg, pollData: updatedPoll };
+        }
+        return msg;
+      });
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatJid]: updatedMessages
+        }
+      };
+    });
+    return;
+  }
+
+  // Handle poll close
+  const pollClose = stanza.getChild('poll-close', 'urn:xmpp:poll');
+  if (pollClose) {
+    const messageId = pollClose.attrs.messageId;
+    const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
+    
+    set((state: any) => {
+      const chatMessages = state.messages[chatJid] || [];
+      const updatedMessages = chatMessages.map((msg: Message) => {
+        if (msg.id === messageId && msg.pollData) {
+          return {
+            ...msg,
+            pollData: { ...msg.pollData, isClosed: true }
+          };
+        }
+        return msg;
+      });
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatJid]: updatedMessages
+        }
+      };
+    });
+    return;
+  }
 
   // Handle chat state notifications
   const chatStates = ['active', 'composing', 'paused', 'inactive', 'gone'];
@@ -96,7 +176,10 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
   // Handle regular messages
   if (body && from !== currentUser) {
     const fileElement = stanza.getChild('file', 'urn:xmpp:file-transfer');
+    const pollElement = stanza.getChild('poll', 'urn:xmpp:poll');
+    
     let fileData = null;
+    let pollData: PollData | null = null;
     
     if (fileElement) {
       fileData = {
@@ -104,6 +187,27 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
         type: fileElement.attrs.type,
         size: parseInt(fileElement.attrs.size),
         url: fileElement.attrs.url
+      };
+    }
+    
+    if (pollElement) {
+      const options = pollElement.getChildren('option').map((opt: any, index: number) => ({
+        id: opt.attrs.id || `opt-${index}`,
+        text: opt.getText(),
+        votes: []
+      }));
+      
+      pollData = {
+        id: pollElement.attrs.id,
+        question: pollElement.attrs.question,
+        options,
+        createdBy: from,
+        createdAt: new Date(),
+        expiresAt: pollElement.attrs.expires ? new Date(pollElement.attrs.expires) : undefined,
+        isAnonymous: pollElement.attrs.anonymous === 'true',
+        allowMultipleChoice: pollElement.attrs.multiple === 'true',
+        isClosed: pollElement.attrs.closed === 'true',
+        totalVotes: 0
       };
     }
 
@@ -114,7 +218,8 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
       body,
       timestamp: new Date(),
       type: type as 'chat' | 'groupchat',
-      fileData
+      fileData,
+      pollData
     };
 
     const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];

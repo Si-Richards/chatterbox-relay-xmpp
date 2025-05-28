@@ -9,6 +9,7 @@ import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { RoomSettings } from './RoomSettings';
 import { TypingIndicator } from './TypingIndicator';
+import { PollMessage } from './PollMessage';
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -28,6 +29,7 @@ const parseMarkdown = (text: string) => {
   parsed = parsed.replace(/_(.*?)_/g, '<em>$1</em>');
   return parsed;
 };
+
 export const ChatArea = () => {
   const [messageText, setMessageText] = useState('');
   const [markdownEnabled, setMarkdownEnabled] = useState(true);
@@ -47,6 +49,9 @@ export const ChatArea = () => {
     rooms,
     sendMessage,
     sendFileMessage,
+    sendPoll,
+    votePoll,
+    closePoll,
     deleteMessage,
     addReaction,
     updateRoomDescription,
@@ -65,6 +70,7 @@ export const ChatArea = () => {
 
   // Fix duplicated messages by using a Set to track unique message IDs
   const currentMessages = activeChat ? Array.from(new Map((messages[activeChat] || []).map(msg => [msg.id, msg])).values()) : [];
+
   const getChatName = () => {
     if (!activeChat) return '';
     if (activeChatType === 'chat') {
@@ -207,6 +213,7 @@ export const ChatArea = () => {
     const contact = contacts.find(c => c.jid === jid);
     return contact?.avatar;
   };
+
   const handleEmojiSelect = (emoji: string) => {
     setMessageText(prev => prev + emoji);
   };
@@ -237,6 +244,28 @@ export const ChatArea = () => {
     };
     sendFileMessage(activeChat, gifData, activeChatType);
   };
+
+  const handleCreatePoll = (pollData: {
+    question: string;
+    options: { text: string }[];
+    isAnonymous: boolean;
+    allowMultipleChoice: boolean;
+    expiresAt?: Date;
+  }) => {
+    if (!activeChat || !activeChatType) return;
+    sendPoll(activeChat, pollData, activeChatType);
+  };
+
+  const handlePollVote = (messageId: string, pollId: string, optionIds: string[]) => {
+    if (!activeChat) return;
+    votePoll(activeChat, messageId, pollId, optionIds);
+  };
+
+  const handleClosePoll = (messageId: string, pollId: string) => {
+    if (!activeChat) return;
+    closePoll(activeChat, messageId, pollId);
+  };
+
   const handleMessageReaction = (messageId: string, emoji: string) => {
     if (!activeChat) return;
     addReaction(activeChat, messageId, emoji);
@@ -376,6 +405,43 @@ export const ChatArea = () => {
         {currentMessages.map(message => {
         const isOwn = isFromCurrentUser(message.from);
         const senderName = activeChatType === 'groupchat' ? message.from.split('/')[1] || message.from.split('@')[0] : message.from.split('@')[0];
+        
+        // Handle poll messages
+        if (message.pollData) {
+          return <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+              {!isOwn && <div className="mr-2 flex-shrink-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>}
+              <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
+                <PollMessage
+                  pollData={message.pollData}
+                  currentUser={currentUser}
+                  onVote={(optionIds) => handlePollVote(message.id, message.pollData!.id, optionIds)}
+                  onClosePoll={() => handleClosePoll(message.id, message.pollData!.id)}
+                  isOwner={isOwn}
+                />
+                <div className={`text-xs mt-1 ${isOwn ? 'text-right text-blue-600' : 'text-gray-500'}`}>
+                  {formatTime(message.timestamp)}
+                  {isOwn && getMessageStatusIcon(message.status)}
+                </div>
+              </div>
+              {isOwn && <div className="ml-2 flex-shrink-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={userAvatar || undefined} />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>}
+            </div>;
+        }
+
+        // Handle regular messages
         const messageContent = <div className="flex items-start space-x-2">
               <div className={`px-4 py-2 rounded-lg ${isOwn ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200'}`}>
                 {!isOwn && activeChatType === 'groupchat' && <p className="text-xs font-medium mb-1 text-blue-600">
@@ -443,7 +509,14 @@ export const ChatArea = () => {
       {/* Message Input - Fixed at bottom */}
       <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center space-x-2 mb-2">
-          <MessageActions onDelete={() => {}} onEmojiSelect={handleEmojiSelect} onFileUpload={handleFileUpload} onGifSelect={handleGifSelect} showDelete={false} />
+          <MessageActions 
+            onDelete={() => {}} 
+            onEmojiSelect={handleEmojiSelect} 
+            onFileUpload={handleFileUpload} 
+            onGifSelect={handleGifSelect} 
+            onCreatePoll={handleCreatePoll}
+            showDelete={false} 
+          />
           
           {/* Markdown Controls */}
           <div className="flex items-center space-x-1 border-l pl-2">

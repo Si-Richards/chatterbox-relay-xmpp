@@ -3,7 +3,8 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Trash2, Smile, Paperclip, Image, FileText } from 'lucide-react';
+import { Trash2, Smile, Paperclip, Image, FileText, BarChart3 } from 'lucide-react';
+import { CreatePollDialog } from './CreatePollDialog';
 import { toast } from '@/hooks/use-toast';
 
 interface MessageActionsProps {
@@ -11,6 +12,13 @@ interface MessageActionsProps {
   onEmojiSelect: (emoji: string) => void;
   onFileUpload: (file: File) => void;
   onGifSelect: (gifUrl: string) => void;
+  onCreatePoll: (pollData: {
+    question: string;
+    options: { text: string }[];
+    isAnonymous: boolean;
+    allowMultipleChoice: boolean;
+    expiresAt?: Date;
+  }) => void;
   showDelete?: boolean;
 }
 
@@ -30,6 +38,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   onEmojiSelect,
   onFileUpload,
   onGifSelect,
+  onCreatePoll,
   showDelete = false
 }) => {
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
@@ -158,6 +167,13 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Poll Creator */}
+      <CreatePollDialog onCreatePoll={onCreatePoll}>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+          <BarChart3 className="h-3 w-3" />
+        </Button>
+      </CreatePollDialog>
 
       {/* Delete Message */}
       {showDelete && (

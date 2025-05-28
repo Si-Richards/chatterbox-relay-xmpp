@@ -3,6 +3,25 @@ export interface MessageReaction {
   users: string[];
 }
 
+export interface PollOption {
+  id: string;
+  text: string;
+  votes: string[]; // JIDs of users who voted for this option
+}
+
+export interface PollData {
+  id: string;
+  question: string;
+  options: PollOption[];
+  createdBy: string;
+  createdAt: Date;
+  expiresAt?: Date;
+  isAnonymous: boolean;
+  allowMultipleChoice: boolean;
+  isClosed: boolean;
+  totalVotes: number;
+}
+
 export interface Message {
   id: string;
   from: string;
@@ -18,6 +37,7 @@ export interface Message {
     size: number;
     url: string;
   };
+  pollData?: PollData;
 }
 
 export interface Contact {
@@ -88,6 +108,9 @@ export interface XMPPState {
   // Message methods
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
   sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
+  sendPoll: (to: string, pollData: Omit<PollData, 'id' | 'createdBy' | 'createdAt' | 'totalVotes'>, type: 'chat' | 'groupchat') => void;
+  votePoll: (chatJid: string, messageId: string, pollId: string, optionIds: string[]) => void;
+  closePoll: (chatJid: string, messageId: string, pollId: string) => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
   markMessageAsDelivered: (from: string, id: string) => void;
   markMessageAsRead: (from: string, id: string) => void;

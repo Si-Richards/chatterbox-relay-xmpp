@@ -1,6 +1,5 @@
-
 import { xml } from '@xmpp/client';
-import { Message } from '../types';
+import { Message, PollData } from '../types';
 import { toast } from '@/hooks/use-toast';
 
 export const createMessageModule = (set: any, get: any) => ({
@@ -80,6 +79,164 @@ export const createMessageModule = (set: any, get: any) => ({
         [fileChatJid]: [...(state.messages[fileChatJid] || []), newMessage]
       }
     }));
+  },
+
+  sendPoll: (to: string, pollData: Omit<PollData, 'id' | 'createdBy' | 'createdAt' | 'totalVotes'>, type: 'chat' | 'groupchat') => {
+    const { client, currentUser } = get();
+    if (!client) return;
+
+    const messageId = `msg-${Date.now()}`;
+    const pollId = `poll-${Date.now()}`;
+    
+    const fullPollData: PollData = {
+      ...pollData,
+      id: pollId,
+      createdBy: currentUser,
+      createdAt: new Date(),
+      totalVotes: 0,
+      options: pollData.options.map((opt, index) => ({
+        id: `opt-${index}`,
+        text: opt.text,
+        votes: []
+      }))
+    };
+
+    const message = xml(
+      'message',
+      { to, type, id: messageId },
+      xml('body', {}, `📊 Poll: ${pollData.question}`),
+      xml('poll', { 
+        xmlns: 'urn:xmpp:poll',
+        id: pollId,
+        question: pollData.question,
+        anonymous: pollData.isAnonymous.toString(),
+        multiple: pollData.allowMultipleChoice.toString(),
+        expires: pollData.expiresAt?.toISOString() || '',
+        closed: 'false'
+      }, ...fullPollData.options.map(opt => 
+        xml('option', { id: opt.id }, opt.text)
+      ))
+    );
+
+    client.send(message);
+
+    const newMessage: Message = {
+      id: messageId,
+      from: currentUser,
+      to,
+      body: `📊 Poll: ${pollData.question}`,
+      timestamp: new Date(),
+      type,
+      status: 'sent',
+      pollData: fullPollData
+    };
+
+    const pollChatJid = type === 'groupchat' ? to : to.split('/')[0];
+    
+    set((state: any) => ({
+      messages: {
+        ...state.messages,
+        [pollChatJid]: [...(state.messages[pollChatJid] || []), newMessage]
+      }
+    }));
+  },
+
+  votePoll: (chatJid: string, messageId: string, pollId: string, optionIds: string[]) => {
+    const { client, currentUser } = get();
+    if (!client) return;
+
+    // Send vote message
+    const voteMessage = xml(
+      'message',
+      { to: chatJid, type: get().activeChatType },
+      xml('poll-vote', {
+        xmlns: 'urn:xmpp:poll',
+        messageId,
+        pollId,
+        voter: currentUser
+      }, ...optionIds.map(id => xml('option', { id })))
+    );
+
+    client.send(voteMessage);
+
+    // Update local state
+    set((state: any) => {
+      const chatMessages = state.messages[chatJid] || [];
+      const updatedMessages = chatMessages.map((msg: Message) => {
+        if (msg.id === messageId && msg.pollData) {
+          const updatedPoll = { ...msg.pollData };
+          
+          // Remove user's previous votes
+          updatedPoll.options = updatedPoll.options.map(opt => ({
+            ...opt,
+            votes: opt.votes.filter(voter => voter !== currentUser)
+          }));
+          
+          // Add new votes
+          updatedPoll.options = updatedPoll.options.map(opt => ({
+            ...opt,
+            votes: optionIds.includes(opt.id) 
+              ? [...opt.votes, currentUser]
+              : opt.votes
+          }));
+          
+          // Recalculate total votes
+          const allVoters = new Set();
+          updatedPoll.options.forEach(opt => {
+            opt.votes.forEach(voter => allVoters.add(voter));
+          });
+          updatedPoll.totalVotes = allVoters.size;
+          
+          return { ...msg, pollData: updatedPoll };
+        }
+        return msg;
+      });
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatJid]: updatedMessages
+        }
+      };
+    });
+  },
+
+  closePoll: (chatJid: string, messageId: string, pollId: string) => {
+    const { client } = get();
+    if (!client) return;
+
+    const closeMessage = xml(
+      'message',
+      { to: chatJid, type: get().activeChatType },
+      xml('poll-close', {
+        xmlns: 'urn:xmpp:poll',
+        messageId,
+        pollId
+      })
+    );
+
+    client.send(closeMessage);
+
+    // Update local state
+    set((state: any) => {
+      const chatMessages = state.messages[chatJid] || [];
+      const updatedMessages = chatMessages.map((msg: Message) => {
+        if (msg.id === messageId && msg.pollData) {
+          return {
+            ...msg,
+            pollData: { ...msg.pollData, isClosed: true }
+          };
+        }
+        return msg;
+      });
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatJid]: updatedMessages
+        }
+      };
+    });
   },
   
   deleteMessage: (chatJid: string, messageId: string) => {
