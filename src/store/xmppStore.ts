@@ -7,6 +7,7 @@ import { createMessageModule } from './modules/messageModule';
 import { createPresenceModule } from './modules/presenceModule';
 import { createRoomModule } from './modules/roomModule';
 import { createTypingModule } from './modules/typingModule';
+import { createGeneralModule } from './modules/generalModule';
 import { createStanzaHandler } from './modules/stanzaHandler';
 
 export * from './types';
@@ -34,6 +35,7 @@ export const useXMPPStore = create<XMPPState>()(
       ...createPresenceModule(set, get),
       ...createRoomModule(set, get),
       ...createTypingModule(set, get),
+      ...createGeneralModule(set, get),
       ...createStanzaHandler(set, get)
     }),
     {
