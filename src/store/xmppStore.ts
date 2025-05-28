@@ -333,19 +333,28 @@ export const useXMPPStore = create<XMPPState>()(
           const gone = stanza.getChild('gone', 'http://jabber.org/protocol/chatstates');
           
           if (composing || paused) {
-            // For MUC rooms: chatJid is room JID, userJid is full JID with nickname
-            // For direct chat: chatJid is user JID, userJid is user JID
+            // For MUC rooms: chatJid is room JID without resource, userJid is full JID with nickname
+            // For direct chat: chatJid is user JID without resource, userJid is user JID
             const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const userJid = from; // Keep full JID to preserve nickname for MUC
             const state = composing ? 'composing' : 'paused';
             
             // Don't show typing for current user
             const { currentUser } = get();
-            const isCurrentUser = type === 'groupchat' 
-              ? from.includes(`/${currentUser.split('@')[0]}`)
-              : from.split('/')[0] === currentUser;
+            let isCurrentUser = false;
+            
+            if (type === 'groupchat') {
+              // For group chats, check if the nickname matches current user
+              const currentUserNickname = currentUser.split('@')[0];
+              const fromNickname = from.split('/')[1];
+              isCurrentUser = fromNickname === currentUserNickname;
+            } else {
+              // For direct chats, check base JID
+              isCurrentUser = from.split('/')[0] === currentUser.split('/')[0];
+            }
             
             if (!isCurrentUser) {
+              console.log(`Setting typing state for ${userJid} in ${stateChatJid}: ${state}`);
               get().setChatState(stateChatJid, userJid, state);
             }
             return;
@@ -354,6 +363,7 @@ export const useXMPPStore = create<XMPPState>()(
           if (active || inactive || gone) {
             const stateChatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
             const userJid = from;
+            console.log(`Clearing typing state for ${userJid} in ${stateChatJid}`);
             get().clearTypingState(stateChatJid, userJid);
             return;
           }
@@ -1388,6 +1398,8 @@ export const useXMPPStore = create<XMPPState>()(
         const { client } = get();
         if (!client) return;
 
+        console.log(`Sending chat state ${state} to ${to} (type: ${type})`);
+
         const stateMessage = xml(
           'message',
           { to, type, id: `state-${Date.now()}` },
@@ -1398,6 +1410,8 @@ export const useXMPPStore = create<XMPPState>()(
       },
 
       setChatState: (chatJid: string, userJid: string, state: 'composing' | 'paused') => {
+        console.log(`Setting typing state: ${userJid} in ${chatJid} is ${state}`);
+        
         set((prevState) => {
           const currentStates = prevState.typingStates[chatJid] || [];
           const filteredStates = currentStates.filter(s => s.user !== userJid);
@@ -1424,6 +1438,8 @@ export const useXMPPStore = create<XMPPState>()(
       },
 
       clearTypingState: (chatJid: string, userJid?: string) => {
+        console.log(`Clearing typing state: ${userJid || 'all'} in ${chatJid}`);
+        
         set((state) => {
           const currentStates = state.typingStates[chatJid] || [];
           const filteredStates = userJid 

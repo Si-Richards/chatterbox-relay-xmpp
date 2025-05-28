@@ -11,10 +11,23 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
   const { typingStates, contacts, currentUser } = useXMPPStore();
   
   const currentTyping = typingStates[chatJid] || [];
-  const activeTyping = currentTyping.filter(state => 
-    state.state === 'composing' &&
-    Date.now() - state.timestamp.getTime() < 10000 // Only show if less than 10 seconds old
-  );
+  const activeTyping = currentTyping.filter(state => {
+    // Filter out expired typing states (older than 10 seconds)
+    const isRecent = Date.now() - state.timestamp.getTime() < 10000;
+    
+    // Filter out current user's typing
+    let isCurrentUser = false;
+    if (chatType === 'groupchat') {
+      // For group chats, check if the full JID contains current user's nickname
+      const currentUserNickname = currentUser.split('@')[0];
+      isCurrentUser = state.user.includes(`/${currentUserNickname}`);
+    } else {
+      // For direct chats, check if the base JID matches current user
+      isCurrentUser = state.user.split('/')[0] === currentUser.split('/')[0];
+    }
+    
+    return state.state === 'composing' && isRecent && !isCurrentUser;
+  });
 
   if (activeTyping.length === 0) {
     return null;
@@ -23,11 +36,11 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
   const getDisplayName = (userJid: string) => {
     if (chatType === 'groupchat') {
       // For group chats, extract nickname from full JID (room@domain/nickname)
-      const nickname = userJid.split('/')[1];
-      if (nickname) {
-        return nickname;
+      const parts = userJid.split('/');
+      if (parts.length > 1) {
+        return parts[1]; // This is the nickname
       }
-      // Fallback to username if no nickname
+      // Fallback to username if no nickname found
       return userJid.split('@')[0];
     } else {
       // For direct chats, find contact name or use username
