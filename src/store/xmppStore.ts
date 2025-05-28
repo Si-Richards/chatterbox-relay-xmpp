@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { client, xml } from '@xmpp/client';
@@ -199,7 +198,7 @@ export const useXMPPStore = create<XMPPState>()(
           const query = stanza.getChild('query', 'jabber:iq:roster');
           if (query) {
             const items = query.getChildren('item');
-            const contacts: Contact[] = items.map((item: any) => ({
+            const newContacts: Contact[] = items.map((item: any) => ({
               jid: item.attrs.jid,
               name: item.attrs.name || item.attrs.jid.split('@')[0],
               presence: 'offline',
@@ -207,12 +206,34 @@ export const useXMPPStore = create<XMPPState>()(
               lastSeen: new Date()
             }));
             
-            set({ contacts });
+            set((state) => {
+              // Merge with existing contacts to preserve lastSeen data
+              const mergedContacts = newContacts.map(newContact => {
+                const existingContact = state.contacts.find(c => c.jid === newContact.jid);
+                if (existingContact) {
+                  // Preserve existing lastSeen and other data, but update name if needed
+                  return {
+                    ...existingContact,
+                    name: newContact.name, // Update name in case it changed
+                  };
+                }
+                return newContact;
+              });
+              
+              // Add any existing contacts that weren't in the roster
+              const existingContactsNotInRoster = state.contacts.filter(
+                existingContact => !newContacts.find(newContact => newContact.jid === existingContact.jid)
+              );
+              
+              return {
+                contacts: [...mergedContacts, ...existingContactsNotInRoster]
+              };
+            });
             
             // Request presence for all contacts
             const { client } = get();
             if (client) {
-              contacts.forEach(contact => {
+              newContacts.forEach(contact => {
                 const presenceProbe = xml('presence', { to: contact.jid, type: 'probe' });
                 client.send(presenceProbe);
               });
@@ -507,7 +528,12 @@ export const useXMPPStore = create<XMPPState>()(
             set((state) => ({
               contacts: state.contacts.map(contact => 
                 contact.jid === from.split('/')[0] 
-                  ? { ...contact, presence: 'offline', lastSeen: new Date() }
+                  ? { 
+                      ...contact, 
+                      presence: 'offline', 
+                      // Only update lastSeen if it's not already set or if this is more recent
+                      lastSeen: contact.lastSeen ? contact.lastSeen : new Date()
+                    }
                   : contact
               )
             }));
@@ -1449,10 +1475,12 @@ export const useXMPPStore = create<XMPPState>()(
         }
         
         if (state?.contacts) {
-          // Convert lastSeen strings back to Date objects
+          // Convert lastSeen strings back to Date objects and ensure proper format
           state.contacts = state.contacts.map(contact => ({
             ...contact,
-            lastSeen: contact.lastSeen ? new Date(contact.lastSeen) : undefined
+            lastSeen: contact.lastSeen 
+              ? (typeof contact.lastSeen === 'string' ? new Date(contact.lastSeen) : contact.lastSeen)
+              : undefined
           }));
         }
       }
