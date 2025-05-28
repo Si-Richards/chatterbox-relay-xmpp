@@ -17,7 +17,6 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
     const isRecent = Date.now() - state.timestamp.getTime() < 10000;
     
     // Filter out current user's typing
-    const currentUserBareJid = currentUser.split('/')[0];
     const currentUserNickname = currentUser.split('@')[0];
     
     let isCurrentUser = false;
@@ -27,12 +26,13 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
       isCurrentUser = state.user === currentUserNickname;
     } else {
       // For direct chats, state.user is the contact name
-      // Find contact and compare with current user
+      // We need to check if this contact corresponds to current user
+      const currentUserBareJid = currentUser.split('/')[0];
       const contact = contacts.find(c => c.name === state.user);
       isCurrentUser = contact?.jid === currentUserBareJid;
     }
     
-    console.log(`Typing filter: user=${state.user}, current=${currentUser}, isCurrentUser=${isCurrentUser}, isRecent=${isRecent}, state=${state.state}`);
+    console.log(`Typing filter: user=${state.user}, chatType=${chatType}, isCurrentUser=${isCurrentUser}, isRecent=${isRecent}, state=${state.state}`);
     
     return state.state === 'composing' && isRecent && !isCurrentUser;
   });

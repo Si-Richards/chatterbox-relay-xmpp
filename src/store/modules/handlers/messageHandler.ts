@@ -15,44 +15,47 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
   for (const state of chatStates) {
     if (stanza.getChild(state, 'http://jabber.org/protocol/chatstates')) {
       let chatJid: string;
-      let userJid: string;
+      let userIdentifier: string;
       
-      // Don't process typing states from current user
       const currentUserBareJid = currentUser.split('/')[0];
       const currentUserNickname = currentUser.split('@')[0];
-      const senderBareJid = from.split('/')[0];
       
       if (type === 'groupchat') {
-        // For group chats: chatJid is room@domain, userJid is nickname
+        // For group chats: chatJid is room@domain, userIdentifier is nickname
         chatJid = from.split('/')[0];
         const nickname = from.split('/')[1];
-        userJid = nickname || from.split('@')[0];
+        userIdentifier = nickname || from.split('@')[0];
         
-        // Skip if it's from current user (check both by nickname and bare JID)
-        if (senderBareJid === currentUserBareJid || nickname === currentUserNickname) {
+        // Skip if it's from current user (check by nickname)
+        if (nickname === currentUserNickname) {
+          console.log(`Skipping typing state from current user: ${nickname}`);
           return;
         }
+        
+        console.log(`Group chat typing: ${userIdentifier} in ${chatJid} is ${state}`);
       } else {
-        // For direct chats: chatJid is sender's bare JID, userJid is sender's name
+        // For direct chats: chatJid is sender's bare JID, userIdentifier is contact name
         chatJid = from.split('/')[0];
-        const { contacts } = get();
-        const contact = contacts.find((c: Contact) => c.jid === chatJid);
-        userJid = contact?.name || from.split('@')[0];
         
         // Skip if it's from current user
-        if (senderBareJid === currentUserBareJid) {
+        if (chatJid === currentUserBareJid) {
+          console.log(`Skipping typing state from current user in direct chat: ${chatJid}`);
           return;
         }
+        
+        const { contacts } = get();
+        const contact = contacts.find((c: Contact) => c.jid === chatJid);
+        userIdentifier = contact?.name || from.split('@')[0];
+        
+        console.log(`Direct chat typing: ${userIdentifier} in ${chatJid} is ${state}`);
       }
       
-      console.log(`Processing chat state: ${state} from ${userJid} in ${chatJid} (type: ${type})`);
-      
       if (state === 'composing') {
-        setChatState(chatJid, userJid, 'composing');
+        setChatState(chatJid, userIdentifier, 'composing');
       } else if (state === 'paused') {
-        setChatState(chatJid, userJid, 'paused');
+        setChatState(chatJid, userIdentifier, 'paused');
       } else {
-        clearTypingState(chatJid, userJid);
+        clearTypingState(chatJid, userIdentifier);
       }
       
       if (!body) return; // Pure chat state, no message content
