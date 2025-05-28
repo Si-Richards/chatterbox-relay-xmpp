@@ -81,7 +81,13 @@ export const createMessageModule = (set: any, get: any) => ({
     }));
   },
 
-  sendPoll: (to: string, pollData: Omit<PollData, 'id' | 'createdBy' | 'createdAt' | 'totalVotes' | 'isClosed'>, type: 'chat' | 'groupchat') => {
+  sendPoll: (to: string, pollData: {
+    question: string;
+    options: { text: string }[];
+    isAnonymous: boolean;
+    allowMultipleChoice: boolean;
+    expiresAt?: Date;
+  }, type: 'chat' | 'groupchat') => {
     const { client, currentUser } = get();
     if (!client) return;
 

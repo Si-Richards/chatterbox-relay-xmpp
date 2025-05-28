@@ -1,3 +1,4 @@
+
 export interface MessageReaction {
   emoji: string;
   users: string[];
@@ -108,7 +109,13 @@ export interface XMPPState {
   // Message methods
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
   sendFileMessage: (to: string, fileData: any, type: 'chat' | 'groupchat') => void;
-  sendPoll: (to: string, pollData: Omit<PollData, 'id' | 'createdBy' | 'createdAt' | 'totalVotes' | 'isClosed'>, type: 'chat' | 'groupchat') => void;
+  sendPoll: (to: string, pollData: {
+    question: string;
+    options: { text: string }[];
+    isAnonymous: boolean;
+    allowMultipleChoice: boolean;
+    expiresAt?: Date;
+  }, type: 'chat' | 'groupchat') => void;
   votePoll: (chatJid: string, messageId: string, pollId: string, optionIds: string[]) => void;
   closePoll: (chatJid: string, messageId: string, pollId: string) => void;
   deleteMessage: (chatJid: string, messageId: string) => void;
