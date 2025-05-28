@@ -1,4 +1,3 @@
-
 export interface MessageReaction {
   emoji: string;
   users: string[];
@@ -54,6 +53,14 @@ export interface TypingState {
   state: 'composing' | 'paused';
 }
 
+export interface NotificationSettings {
+  enabled: boolean;
+  soundEnabled: boolean;
+  showForDirectMessages: boolean;
+  showForGroupMessages: boolean;
+  doNotDisturb: boolean;
+}
+
 export interface XMPPState {
   client: any;
   isConnected: boolean;
@@ -69,6 +76,7 @@ export interface XMPPState {
   roomSortMethod: 'newest' | 'alphabetical';
   typingStates: Record<string, TypingState[]>;
   currentUserTyping: Record<string, boolean>;
+  notificationSettings: NotificationSettings;
 
   // Connection methods
   connect: (username: string, password: string) => Promise<void>;
@@ -110,4 +118,7 @@ export interface XMPPState {
 
   // Stanza handler
   handleStanza: (stanza: any) => void;
+
+  // Notification methods
+  updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
 }

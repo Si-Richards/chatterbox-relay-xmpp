@@ -14,7 +14,7 @@ export const createStanzaHandler = (set: any, get: any) => ({
 });
 
 const handleMessageStanza = (stanza: any, set: any, get: any) => {
-  const { currentUser, markMessageAsDelivered, setChatState, clearTypingState } = get();
+  const { currentUser, markMessageAsDelivered, setChatState, clearTypingState, showMessageNotification } = get();
   const from = stanza.attrs.from;
   const to = stanza.attrs.to;
   const type = stanza.attrs.type || 'chat';
@@ -123,6 +123,9 @@ const handleMessageStanza = (stanza: any, set: any, get: any) => {
         [chatJid]: [...(state.messages[chatJid] || []), message]
       }
     }));
+
+    // Show desktop notification for new message
+    showMessageNotification(from, body, type as 'chat' | 'groupchat');
 
     // Send delivery receipt
     if (id && stanza.getChild('request', 'urn:xmpp:receipts')) {

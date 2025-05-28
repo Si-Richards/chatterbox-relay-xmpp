@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { XMPPState, Message, Contact } from './types';
@@ -9,6 +8,7 @@ import { createRoomModule } from './modules/roomModule';
 import { createTypingModule } from './modules/typingModule';
 import { createGeneralModule } from './modules/generalModule';
 import { createStanzaHandler } from './modules/stanzaHandler';
+import { createNotificationModule } from './modules/notificationModule';
 
 export * from './types';
 
@@ -29,6 +29,13 @@ export const useXMPPStore = create<XMPPState>()(
       roomSortMethod: 'newest',
       typingStates: {},
       currentUserTyping: {},
+      notificationSettings: {
+        enabled: false,
+        soundEnabled: true,
+        showForDirectMessages: true,
+        showForGroupMessages: true,
+        doNotDisturb: false,
+      },
       
       ...createConnectionModule(set, get),
       ...createMessageModule(set, get),
@@ -36,7 +43,8 @@ export const useXMPPStore = create<XMPPState>()(
       ...createRoomModule(set, get),
       ...createTypingModule(set, get),
       ...createGeneralModule(set, get),
-      ...createStanzaHandler(set, get)
+      ...createStanzaHandler(set, get),
+      ...createNotificationModule(set, get)
     }),
     {
       name: 'xmpp-store',
@@ -47,7 +55,8 @@ export const useXMPPStore = create<XMPPState>()(
         userAvatar: state.userAvatar,
         userStatus: state.userStatus,
         contactSortMethod: state.contactSortMethod,
-        roomSortMethod: state.roomSortMethod
+        roomSortMethod: state.roomSortMethod,
+        notificationSettings: state.notificationSettings
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.messages) {
