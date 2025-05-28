@@ -18,15 +18,15 @@ export const createTypingModule = (set: any, get: any) => ({
     client.send(stateMessage);
   },
 
-  setChatState: (chatJid: string, userJid: string, state: 'composing' | 'paused') => {
-    console.log(`Setting typing state: ${userJid} in ${chatJid} is ${state}`);
+  setChatState: (chatJid: string, userIdentifier: string, state: 'composing' | 'paused') => {
+    console.log(`Setting typing state: ${userIdentifier} in ${chatJid} is ${state}`);
     
     set((prevState: any) => {
       const currentStates = prevState.typingStates[chatJid] || [];
-      const filteredStates = currentStates.filter((s: TypingState) => s.user !== userJid);
+      const filteredStates = currentStates.filter((s: TypingState) => s.user !== userIdentifier);
       
       const newState: TypingState = {
-        user: userJid,
+        user: userIdentifier,
         chatJid,
         timestamp: new Date(),
         state
@@ -42,17 +42,17 @@ export const createTypingModule = (set: any, get: any) => ({
 
     // Auto-clear typing state after 10 seconds
     setTimeout(() => {
-      get().clearTypingState(chatJid, userJid);
+      get().clearTypingState(chatJid, userIdentifier);
     }, 10000);
   },
 
-  clearTypingState: (chatJid: string, userJid?: string) => {
-    console.log(`Clearing typing state: ${userJid || 'all'} in ${chatJid}`);
+  clearTypingState: (chatJid: string, userIdentifier?: string) => {
+    console.log(`Clearing typing state: ${userIdentifier || 'all'} in ${chatJid}`);
     
     set((state: any) => {
       const currentStates = state.typingStates[chatJid] || [];
-      const filteredStates = userJid 
-        ? currentStates.filter((s: TypingState) => s.user !== userJid)
+      const filteredStates = userIdentifier 
+        ? currentStates.filter((s: TypingState) => s.user !== userIdentifier)
         : [];
 
       return {

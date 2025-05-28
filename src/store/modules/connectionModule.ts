@@ -53,9 +53,32 @@ export const createConnectionModule = (set: any, get: any) => ({
           xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
         );
         xmppClient.send(discoIq);
+
+        // Auto-accept presence subscriptions and send presence probes to roster contacts
+        setTimeout(() => {
+          const { contacts } = get();
+          contacts.forEach((contact: any) => {
+            // Send presence probe to get current status
+            const presenceProbe = xml('presence', { to: contact.jid, type: 'probe' });
+            xmppClient.send(presenceProbe);
+          });
+        }, 1000);
       });
 
       xmppClient.on('stanza', (stanza: any) => {
+        // Handle presence subscription requests
+        if (stanza.is('presence') && stanza.attrs.type === 'subscribe') {
+          // Auto-accept subscription requests
+          const subscribed = xml('presence', { to: stanza.attrs.from, type: 'subscribed' });
+          xmppClient.send(subscribed);
+          
+          // Send subscription request back
+          const subscribe = xml('presence', { to: stanza.attrs.from, type: 'subscribe' });
+          xmppClient.send(subscribe);
+          
+          console.log(`Auto-accepted subscription from ${stanza.attrs.from}`);
+        }
+        
         const { handleStanza } = get();
         handleStanza(stanza);
       });

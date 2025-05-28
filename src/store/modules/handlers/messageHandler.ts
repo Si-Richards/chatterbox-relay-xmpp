@@ -17,22 +17,32 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
       let chatJid: string;
       let userJid: string;
       
-      if (type === 'groupchat') {
-        // For group chats: chatJid is room@domain, userJid is full JID with resource
-        chatJid = from.split('/')[0];
-        userJid = from; // Keep full JID for group chats
-      } else {
-        // For direct chats: chatJid is sender's bare JID, userJid is sender's bare JID
-        chatJid = from.split('/')[0];
-        userJid = from.split('/')[0];
-      }
-      
       // Don't process typing states from current user
       const currentUserBareJid = currentUser.split('/')[0];
+      const currentUserNickname = currentUser.split('@')[0];
       const senderBareJid = from.split('/')[0];
       
-      if (senderBareJid === currentUserBareJid) {
-        return; // Skip own typing states
+      if (type === 'groupchat') {
+        // For group chats: chatJid is room@domain, userJid is nickname
+        chatJid = from.split('/')[0];
+        const nickname = from.split('/')[1];
+        userJid = nickname || from.split('@')[0];
+        
+        // Skip if it's from current user (check both by nickname and bare JID)
+        if (senderBareJid === currentUserBareJid || nickname === currentUserNickname) {
+          return;
+        }
+      } else {
+        // For direct chats: chatJid is sender's bare JID, userJid is sender's name
+        chatJid = from.split('/')[0];
+        const { contacts } = get();
+        const contact = contacts.find((c: Contact) => c.jid === chatJid);
+        userJid = contact?.name || from.split('@')[0];
+        
+        // Skip if it's from current user
+        if (senderBareJid === currentUserBareJid) {
+          return;
+        }
       }
       
       console.log(`Processing chat state: ${state} from ${userJid} in ${chatJid} (type: ${type})`);
@@ -122,7 +132,14 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
     }
 
     // Clear typing state for sender
-    const senderJid = type === 'groupchat' ? from : from.split('/')[0];
-    clearTypingState(chatJid, senderJid);
+    if (type === 'groupchat') {
+      const nickname = from.split('/')[1];
+      clearTypingState(chatJid, nickname || from.split('@')[0]);
+    } else {
+      const { contacts } = get();
+      const contact = contacts.find((c: Contact) => c.jid === chatJid);
+      const userName = contact?.name || from.split('@')[0];
+      clearTypingState(chatJid, userName);
+    }
   }
 };

@@ -18,20 +18,18 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
     
     // Filter out current user's typing
     const currentUserBareJid = currentUser.split('/')[0];
+    const currentUserNickname = currentUser.split('@')[0];
+    
     let isCurrentUser = false;
     
     if (chatType === 'groupchat') {
-      // For group chats, state.user is the full JID (room@domain/nickname)
-      const typingUserBareJid = state.user.split('/')[0];
-      const typingUserNickname = state.user.split('/')[1];
-      const currentUserNickname = currentUser.split('@')[0];
-      
-      // Check if this is the current user by comparing nickname or bare JID
-      isCurrentUser = typingUserBareJid === currentUserBareJid || 
-                      typingUserNickname === currentUserNickname;
+      // For group chats, state.user is the nickname
+      isCurrentUser = state.user === currentUserNickname;
     } else {
-      // For direct chats, state.user is the bare JID
-      isCurrentUser = state.user === currentUserBareJid;
+      // For direct chats, state.user is the contact name
+      // Find contact and compare with current user
+      const contact = contacts.find(c => c.name === state.user);
+      isCurrentUser = contact?.jid === currentUserBareJid;
     }
     
     console.log(`Typing filter: user=${state.user}, current=${currentUser}, isCurrentUser=${isCurrentUser}, isRecent=${isRecent}, state=${state.state}`);
@@ -43,27 +41,11 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ chatJid, chatT
     return null;
   }
 
-  const getDisplayName = (userJid: string) => {
-    if (chatType === 'groupchat') {
-      // For group chats, extract nickname from full JID (room@domain/nickname)
-      const parts = userJid.split('/');
-      if (parts.length > 1) {
-        return parts[1]; // This is the nickname
-      }
-      // Fallback to username if no nickname found
-      return userJid.split('@')[0];
-    } else {
-      // For direct chats, find contact name or use username
-      const contact = contacts.find(c => c.jid === userJid);
-      return contact?.name || userJid.split('@')[0];
-    }
-  };
-
   const getTypingText = () => {
     if (activeTyping.length === 1) {
-      return `${getDisplayName(activeTyping[0].user)} is typing...`;
+      return `${activeTyping[0].user} is typing...`;
     } else if (activeTyping.length === 2) {
-      return `${getDisplayName(activeTyping[0].user)} and ${getDisplayName(activeTyping[1].user)} are typing...`;
+      return `${activeTyping[0].user} and ${activeTyping[1].user} are typing...`;
     } else {
       return `${activeTyping.length} people are typing...`;
     }

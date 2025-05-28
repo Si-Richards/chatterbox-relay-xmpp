@@ -51,8 +51,11 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
     const show = stanza.getChildText('show') || 'online';
     const presence = type === 'unavailable' ? 'offline' : show;
     
-    set((state: any) => ({
-      contacts: state.contacts.map((contact: Contact) => {
+    console.log(`Updating presence for ${jid}: ${presence}`);
+    
+    set((state: any) => {
+      // Update existing contact presence
+      const updatedContacts = state.contacts.map((contact: Contact) => {
         if (contact.jid === jid) {
           return {
             ...contact,
@@ -61,7 +64,23 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
           };
         }
         return contact;
-      })
-    }));
+      });
+      
+      // If contact doesn't exist, add them
+      const contactExists = state.contacts.find((c: Contact) => c.jid === jid);
+      if (!contactExists && type !== 'unavailable') {
+        updatedContacts.push({
+          jid,
+          name: jid.split('@')[0],
+          presence: presence as Contact['presence'],
+          avatar: null,
+          lastSeen: presence === 'offline' ? new Date() : undefined
+        });
+      }
+      
+      return {
+        contacts: updatedContacts
+      };
+    });
   }
 };
