@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Message, Contact, Room, RoomAffiliation } from '../types';
 
@@ -131,8 +130,8 @@ const handlePresenceStanza = (stanza: any, set: any, get: any) => {
           if (room.jid === roomJid) {
             return {
               ...room,
-              participants: room.participants.filter(p => 
-                typeof p === 'string' ? !p.includes(nickname) : p.jid !== from
+              participants: room.participants.filter((p: string) => 
+                !p.includes(nickname)
               )
             };
           }
@@ -144,8 +143,8 @@ const handlePresenceStanza = (stanza: any, set: any, get: any) => {
       set((state: any) => ({
         rooms: state.rooms.map((room: Room) => {
           if (room.jid === roomJid) {
-            const existingParticipant = room.participants.find(p => 
-              typeof p === 'string' ? p.includes(nickname) : p.jid === from
+            const existingParticipant = room.participants.find((p: string) => 
+              p.includes(nickname)
             );
             
             if (!existingParticipant) {

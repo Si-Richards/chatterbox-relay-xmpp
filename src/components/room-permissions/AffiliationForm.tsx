@@ -62,7 +62,10 @@ export const AffiliationForm: React.FC<AffiliationFormProps> = ({
     
     try {
       await retryOperation(async () => {
-        await setRoomAffiliation(room.jid, sanitizedJid, selectedAffiliation);
+        // setRoomAffiliation expects (roomJid, userJid, affiliation, role)
+        // We need to provide a default role based on affiliation
+        const role = selectedAffiliation === 'owner' || selectedAffiliation === 'admin' ? 'moderator' : 'participant';
+        setRoomAffiliation(room.jid, sanitizedJid, selectedAffiliation, role);
       });
       
       setSelectedUser('');

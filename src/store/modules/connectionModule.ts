@@ -1,4 +1,3 @@
-
 import { client, xml } from '@xmpp/client';
 import { XMPPState } from '../types';
 
@@ -124,13 +123,13 @@ export const createConnectionModule = (set: any, get: any) => ({
     client.send(presence);
   },
 
-  fetchServerUsers: async () => {
+  fetchServerUsers: async (): Promise<{ jid: string; name: string; }[]> => {
     const { client } = get();
     if (!client) {
       throw new Error('Not connected to server');
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<{ jid: string; name: string; }[]>((resolve, reject) => {
       const queryId = `users-${Date.now()}`;
       
       const iq = xml(
@@ -162,7 +161,7 @@ export const createConnectionModule = (set: any, get: any) => ({
             
             resolve(users);
           } else {
-            const mockUsers = [
+            const mockUsers: { jid: string; name: string; }[] = [
               { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
               { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
               { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
@@ -186,7 +185,7 @@ export const createConnectionModule = (set: any, get: any) => ({
       
       setTimeout(() => {
         client.off('stanza', handleResponse);
-        const mockUsers = [
+        const mockUsers: { jid: string; name: string; }[] = [
           { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
           { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
           { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
