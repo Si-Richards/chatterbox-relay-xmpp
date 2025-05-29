@@ -29,12 +29,44 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
   // Check if MAM message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(originalMessage);
   
-  // Get read status from persisted storage
+  // Determine if this message was sent by the current user
+  let isSentByCurrentUser = false;
+  let chatJid = '';
+  
+  if (mamType === 'groupchat') {
+    // For group chats, check if the nickname part matches current user
+    const fromNick = mamFrom.split('/')[1];
+    const currentUserNick = currentUser.split('@')[0];
+    isSentByCurrentUser = fromNick === currentUserNick || mamFrom.includes(currentUserNick);
+    chatJid = mamFrom.split('/')[0];
+  } else {
+    // For direct chats, check if from matches current user JID
+    isSentByCurrentUser = mamFrom === currentUser || mamFrom.split('/')[0] === currentUser.split('/')[0];
+    chatJid = isSentByCurrentUser ? mamTo.split('/')[0] : mamFrom.split('/')[0];
+  }
+  
+  // Debug logging
+  console.log('MAM Message Processing:', {
+    mamFrom,
+    mamTo,
+    currentUser,
+    mamType,
+    isSentByCurrentUser,
+    chatJid
+  });
+  
+  // Get read status from persisted storage (only for received messages)
   const state = get();
   const pendingReadStatus = (state as any).pendingReadStatus || {};
-  const chatJid = mamType === 'groupchat' ? mamFrom.split('/')[0] : 
-                 (mamFrom.includes(currentUser.split('@')[0]) ? mamTo.split('/')[0] : mamFrom.split('/')[0]);
-  const isRead = pendingReadStatus[chatJid]?.[mamId] === 'read';
+  const isRead = !isSentByCurrentUser && pendingReadStatus[chatJid]?.[mamId] === 'read';
+  
+  // Set appropriate status based on message origin
+  let messageStatus: 'sent' | 'delivered' | 'read';
+  if (isSentByCurrentUser) {
+    messageStatus = 'sent';
+  } else {
+    messageStatus = isRead ? 'read' : 'delivered';
+  }
   
   const message: Message = {
     id: mamId,
@@ -43,7 +75,7 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
     body: omemoInfo.isEncrypted ? (omemoInfo.fallbackBody || mamBody) : mamBody,
     timestamp,
     type: mamType as 'chat' | 'groupchat',
-    status: isRead ? 'read' : 'delivered',
+    status: messageStatus,
     isEncrypted: omemoInfo.isEncrypted,
     encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
   };
