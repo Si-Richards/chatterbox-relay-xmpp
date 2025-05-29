@@ -21,11 +21,13 @@ export const createConnectionModule = (set: any, get: any) => ({
       connectionHealth: {
         isHealthy: true,
         lastPing: null,
+        lastPingResponse: null,
         reconnectAttempts: 0,
         maxReconnectAttempts: 5,
         pingInterval: null,
         reconnectTimeout: null,
         intentionalDisconnect: false,
+        currentPingId: null,
       }
     });
 
@@ -44,6 +46,7 @@ export const createConnectionModule = (set: any, get: any) => ({
       });
 
       xmppClient.on('offline', () => {
+        console.log('XMPP client went offline');
         set({ isConnected: false });
         const { stopConnectionHealthCheck } = get();
         stopConnectionHealthCheck();
@@ -101,10 +104,11 @@ export const createConnectionModule = (set: any, get: any) => ({
       });
 
       xmppClient.on('stanza', (stanza: any) => {
-        // Handle ping responses
+        // Handle ping responses with proper ID tracking
         if (stanza.is('iq') && stanza.attrs.type === 'result' && stanza.attrs.id?.startsWith('ping-')) {
           const { handlePingResponse } = get();
-          handlePingResponse();
+          console.log('Received ping response for ID:', stanza.attrs.id);
+          handlePingResponse(stanza.attrs.id);
           return;
         }
 
@@ -135,6 +139,7 @@ export const createConnectionModule = (set: any, get: any) => ({
   disconnect: () => {
     const { client, stopConnectionHealthCheck, stopPeriodicRoomRefresh } = get();
     
+    console.log('Disconnecting - setting intentional disconnect flag');
     // Set intentional disconnect flag to prevent auto-reconnection
     set((state: any) => ({
       connectionHealth: {

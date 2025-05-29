@@ -5,11 +5,13 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
   connectionHealth: {
     isHealthy: true,
     lastPing: null as Date | null,
+    lastPingResponse: null as Date | null,
     reconnectAttempts: 0,
     maxReconnectAttempts: 5,
     pingInterval: null as NodeJS.Timeout | null,
     reconnectTimeout: null as NodeJS.Timeout | null,
     intentionalDisconnect: false,
+    currentPingId: null as string | null,
   },
 
   startConnectionHealthCheck: () => {
@@ -22,13 +24,14 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
       clearInterval(connectionHealth.pingInterval);
     }
 
-    // Send ping every 30 seconds
+    // Send ping every 60 seconds (increased from 30)
     const pingInterval = setInterval(() => {
       const { client, sendPing, connectionHealth } = get();
       if (client && client.status === 'online' && !connectionHealth.intentionalDisconnect) {
+        console.log('Sending periodic ping...');
         sendPing();
       }
-    }, 30000);
+    }, 60000);
 
     set((state: any) => ({
       connectionHealth: {
@@ -65,44 +68,55 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
     const pingId = `ping-${Date.now()}`;
     const ping = xml('iq', { type: 'get', id: pingId }, xml('ping', { xmlns: 'urn:xmpp:ping' }));
     
+    console.log('Sending ping with ID:', pingId);
     client.send(ping);
     
     set((state: any) => ({
       connectionHealth: {
         ...state.connectionHealth,
         lastPing: new Date(),
+        currentPingId: pingId,
       }
     }));
 
-    // Set timeout for ping response
+    // Set timeout for ping response (increased to 30 seconds)
     setTimeout(() => {
       const { connectionHealth, handleConnectionUnhealthy } = get();
-      const timeSinceLastPing = Date.now() - (connectionHealth.lastPing?.getTime() || 0);
       
-      if (timeSinceLastPing > 10000 && !connectionHealth.intentionalDisconnect) { // No response for 10 seconds
+      // Only mark as unhealthy if we haven't received a response for this specific ping
+      if (connectionHealth.currentPingId === pingId && 
+          (!connectionHealth.lastPingResponse || 
+           connectionHealth.lastPingResponse < connectionHealth.lastPing) &&
+          !connectionHealth.intentionalDisconnect) {
+        console.warn('Ping timeout - no response received for ping:', pingId);
         handleConnectionUnhealthy();
       }
-    }, 10000);
+    }, 30000);
   },
 
-  handlePingResponse: () => {
+  handlePingResponse: (pingId?: string) => {
+    console.log('Received ping response for ID:', pingId);
     set((state: any) => ({
       connectionHealth: {
         ...state.connectionHealth,
         isHealthy: true,
         reconnectAttempts: 0,
+        lastPingResponse: new Date(),
+        currentPingId: null,
       }
     }));
   },
 
   handleConnectionUnhealthy: () => {
-    const { connectionHealth, attemptReconnect } = get();
+    const { connectionHealth } = get();
     
     // Don't mark as unhealthy if disconnect was intentional
     if (connectionHealth.intentionalDisconnect) {
+      console.log('Ignoring connection health issue - disconnect was intentional');
       return;
     }
     
+    console.warn('Connection marked as unhealthy');
     set((state: any) => ({
       connectionHealth: {
         ...state.connectionHealth,
@@ -110,13 +124,12 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
       }
     }));
 
-    if (connectionHealth.reconnectAttempts < connectionHealth.maxReconnectAttempts) {
-      attemptReconnect();
-    }
+    // Don't automatically disconnect - just show connection issues
+    // This prevents unexpected logouts
   },
 
   attemptReconnect: () => {
-    const { connectionHealth, disconnect, connect } = get();
+    const { connectionHealth } = get();
     
     // Don't attempt reconnect if disconnect was intentional
     if (connectionHealth.intentionalDisconnect) {
@@ -125,6 +138,7 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
     
     const backoffDelay = Math.min(1000 * Math.pow(2, connectionHealth.reconnectAttempts), 30000);
 
+    console.log('Scheduling reconnect attempt in', backoffDelay, 'ms');
     set((state: any) => ({
       connectionHealth: {
         ...state.connectionHealth,
@@ -134,12 +148,17 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
 
     const reconnectTimeout = setTimeout(async () => {
       try {
-        // Store credentials from previous connection
         const currentUser = get().currentUser;
         if (currentUser && !get().connectionHealth.intentionalDisconnect) {
-          disconnect();
-          // Note: In a real implementation, you'd need to store username/password
-          // For now, we'll just show the reconnect button
+          console.log('Attempting automatic reconnection...');
+          // In a real implementation, you'd store credentials and reconnect
+          // For now, we'll just mark as needing manual reconnection
+          set((state: any) => ({
+            connectionHealth: {
+              ...state.connectionHealth,
+              isHealthy: false,
+            }
+          }));
         }
       } catch (error) {
         console.error('Reconnection failed:', error);
@@ -156,17 +175,20 @@ export const createConnectionHealthModule = (set: any, get: any) => ({
 
   manualReconnect: () => {
     const { disconnect } = get();
+    console.log('Manual reconnect requested');
     disconnect();
     
     set((state: any) => ({
       connectionHealth: {
         isHealthy: true,
         lastPing: null,
+        lastPingResponse: null,
         reconnectAttempts: 0,
         maxReconnectAttempts: 5,
         pingInterval: null,
         reconnectTimeout: null,
         intentionalDisconnect: false,
+        currentPingId: null,
       }
     }));
   },

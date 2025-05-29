@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings, Users, UserPlus, Lock } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings, Users, UserPlus, Lock, AlertCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
@@ -28,6 +28,53 @@ const parseMarkdown = (text: string) => {
   parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
   parsed = parsed.replace(/_(.*?)_/g, '<em>$1</em>');
   return parsed;
+};
+
+// Image component with error handling
+const ImageWithFallback = ({ src, alt, className, style }: { src: string; alt: string; className?: string; style?: React.CSSProperties }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    console.log('Image loaded successfully:', src);
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoading(false);
+    console.error('Failed to load image:', src);
+  };
+
+  if (imageError) {
+    return (
+      <div className={`flex items-center justify-center bg-gray-100 rounded ${className}`} style={style}>
+        <div className="text-center p-4">
+          <AlertCircle className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Failed to load image</p>
+          <p className="text-xs text-gray-400 mt-1">URL: {src}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {imageLoading && (
+        <div className={`absolute inset-0 flex items-center justify-center bg-gray-100 rounded ${className}`} style={style}>
+          <div className="text-sm text-gray-500">Loading...</div>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        style={style}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    </div>
+  );
 };
 
 export const ChatArea = () => {
@@ -236,6 +283,7 @@ export const ChatArea = () => {
   };
   const handleGifSelect = (gifUrl: string) => {
     if (!activeChat || !activeChatType) return;
+    console.log('Sending GIF:', gifUrl);
     const gifData = {
       name: 'animated.gif',
       type: 'image/gif',
@@ -455,10 +503,15 @@ export const ChatArea = () => {
                   </div>}
                 
                 {message.fileData ? <div className="space-y-2">
-                    {message.fileData.type.startsWith('image/') ? <img src={message.fileData.url} alt={message.fileData.name} className="max-w-xs rounded" style={{
-                maxHeight: '300px',
-                objectFit: 'contain'
-              }} /> : <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
+                    {message.fileData.type.startsWith('image/') ? <ImageWithFallback 
+                        src={message.fileData.url} 
+                        alt={message.fileData.name} 
+                        className="max-w-xs rounded" 
+                        style={{
+                          maxHeight: '300px',
+                          objectFit: 'contain'
+                        }} 
+                      /> : <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
                         <div className="text-sm">
                           <p className="font-medium">{message.fileData.name}</p>
                           <p className="text-gray-500">{(message.fileData.size / 1024).toFixed(1)} KB</p>

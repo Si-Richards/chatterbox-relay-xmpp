@@ -1,117 +1,124 @@
 
-import { Message, Contact, PollData } from '../../types';
+import { Message } from '../../types';
 
 export const handleRegularMessage = (stanza: any, set: any, get: any) => {
-  const { 
-    currentUser, 
-    markMessageAsDelivered, 
-    clearTypingState, 
-    showMessageNotification, 
-    handleOMEMOMessage 
-  } = get();
-  
   const from = stanza.attrs.from;
   const to = stanza.attrs.to;
-  const type = stanza.attrs.type || 'chat';
-  const id = stanza.attrs.id;
   const body = stanza.getChildText('body');
+  const type = stanza.attrs.type || 'chat';
+  const id = stanza.attrs.id || `msg-${Date.now()}`;
+  const currentUser = get().currentUser;
 
-  if (!body || from === currentUser) {
-    return false;
-  }
+  // Skip if no body content
+  if (!body) return;
 
-  const fileElement = stanza.getChild('file', 'urn:xmpp:file-transfer');
-  const pollElement = stanza.getChild('poll', 'urn:xmpp:poll');
-  
-  // Check for OMEMO encryption
-  const omemoInfo = handleOMEMOMessage(stanza);
-  
-  let fileData = null;
-  let pollData: PollData | null = null;
-  
-  if (fileElement) {
-    fileData = {
-      name: fileElement.attrs.name,
-      type: fileElement.attrs.type,
-      size: parseInt(fileElement.attrs.size),
-      url: fileElement.attrs.url
-    };
-  }
-  
-  if (pollElement) {
-    const options = pollElement.getChildren('option').map((opt: any, index: number) => ({
-      id: opt.attrs.id || `opt-${index}`,
-      text: opt.getText(),
-      votes: []
-    }));
+  let chatJid: string;
+  let fromJid: string;
+
+  if (type === 'groupchat') {
+    chatJid = from.split('/')[0];
+    fromJid = from;
     
-    pollData = {
-      id: pollElement.attrs.id,
-      question: pollElement.attrs.question,
-      options,
-      createdBy: from,
-      createdAt: new Date(),
-      expiresAt: pollElement.attrs.expires ? new Date(pollElement.attrs.expires) : undefined,
-      isAnonymous: pollElement.attrs.anonymous === 'true',
-      allowMultipleChoice: pollElement.attrs.multiple === 'true',
-      isClosed: pollElement.attrs.closed === 'true',
-      totalVotes: 0
-    };
+    // Skip messages from current user in group chats
+    const nickname = from.split('/')[1];
+    const currentUserNickname = currentUser.split('@')[0];
+    if (nickname === currentUserNickname) {
+      console.log(`Skipping message from current user: ${nickname}`);
+      return;
+    }
+  } else {
+    chatJid = from.split('/')[0];
+    fromJid = from.split('/')[0];
+    
+    // Skip messages from current user in direct chats
+    const currentUserBareJid = currentUser.split('/')[0];
+    if (chatJid === currentUserBareJid) {
+      console.log(`Skipping message from current user in direct chat: ${chatJid}`);
+      return;
+    }
+  }
+
+  // Check for OMEMO encryption
+  const encrypted = stanza.getChild('encrypted', 'eu.siacs.conversations.axolotl');
+  const isEncrypted = !!encrypted;
+  
+  // Check for file attachments with better error handling
+  let fileData = null;
+  const oobUrl = stanza.getChild('x', 'jabber:x:oob');
+  if (oobUrl) {
+    const url = oobUrl.getChildText('url');
+    const desc = oobUrl.getChildText('desc') || 'File';
+    
+    console.log('Processing file attachment:', { url, desc });
+    
+    if (url) {
+      // Determine file type from URL or description
+      let fileType = 'application/octet-stream';
+      let fileName = desc;
+      
+      if (url.includes('.gif') || desc.toLowerCase().includes('gif')) {
+        fileType = 'image/gif';
+        fileName = fileName || 'animated.gif';
+        console.log('Detected GIF file:', url);
+      } else if (url.match(/\.(jpg|jpeg|png|webp)$/i)) {
+        fileType = `image/${url.split('.').pop()?.toLowerCase()}`;
+        fileName = fileName || `image.${url.split('.').pop()}`;
+      }
+      
+      fileData = {
+        name: fileName,
+        type: fileType,
+        size: 0,
+        url: url
+      };
+      
+      // Add error handling for image loading
+      if (fileType.startsWith('image/')) {
+        // Test if the image URL is accessible
+        const testImage = new Image();
+        testImage.onload = () => {
+          console.log('Image loaded successfully:', url);
+        };
+        testImage.onerror = () => {
+          console.error('Failed to load image:', url);
+          // Could update the message to show an error state
+        };
+        testImage.src = url;
+      }
+    }
   }
 
   const message: Message = {
-    id: id || `msg-${Date.now()}`,
-    from,
+    id,
+    from: fromJid,
     to,
-    body: omemoInfo.isEncrypted ? (omemoInfo.fallbackBody || body) : body,
+    body: isEncrypted ? 'This message was encrypted but could not be decrypted.' : body,
     timestamp: new Date(),
-    type: type as 'chat' | 'groupchat',
+    type,
     fileData,
-    pollData,
-    isEncrypted: omemoInfo.isEncrypted,
-    encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
+    isEncrypted,
+    status: 'received'
   };
 
-  const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
-  
-  set((state: any) => {
-    const existingMessages = state.messages[chatJid] || [];
-    // Check for duplicates to avoid adding same message twice
-    const messageExists = existingMessages.some((msg: Message) => 
-      msg.id === message.id || 
-      (msg.from === message.from && msg.body === message.body && 
-       Math.abs(new Date(msg.timestamp).getTime() - message.timestamp.getTime()) < 1000)
-    );
-    
-    if (!messageExists) {
-      return {
-        messages: {
-          ...state.messages,
-          [chatJid]: [...existingMessages, message]
-        }
-      };
-    }
-    return state;
+  console.log('Adding regular message:', {
+    chatJid,
+    messageId: id,
+    hasFileData: !!fileData,
+    fileType: fileData?.type,
+    isEncrypted
   });
 
-  // Show desktop notification for new message
-  showMessageNotification(from, omemoInfo.isEncrypted ? '🔒 Encrypted message' : body, type as 'chat' | 'groupchat');
+  set((state: any) => ({
+    messages: {
+      ...state.messages,
+      [chatJid]: [...(state.messages[chatJid] || []), message]
+    }
+  }));
 
-  // Send delivery receipt
-  if (id && stanza.getChild('request', 'urn:xmpp:receipts')) {
-    markMessageAsDelivered(from, id);
+  // Trigger notifications for incoming messages
+  const { triggerNotification } = get();
+  if (triggerNotification) {
+    const isDirectMessage = type === 'chat';
+    triggerNotification(chatJid, message, isDirectMessage);
   }
-
-  // Clear typing state for sender
-  if (type === 'groupchat') {
-    const nickname = from.split('/')[1];
-    clearTypingState(chatJid, nickname || from.split('@')[0]);
-  } else {
-    const { contacts } = get();
-    const contact = contacts.find((c: Contact) => c.jid === chatJid);
-    const userName = contact?.name || from.split('@')[0];
-    clearTypingState(chatJid, userName);
-  }
-
-  return true;
 };
