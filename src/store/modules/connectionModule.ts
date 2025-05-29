@@ -9,13 +9,25 @@ export const createConnectionModule = (set: any, get: any) => ({
   ...createServerUsersModule(set, get),
   
   connect: async (username: string, password: string) => {
-    // Clear intentional disconnect flag when connecting
-    set((state: any) => ({
+    // Clear all dynamic data before connecting to ensure fresh state
+    set({
+      contacts: [],
+      rooms: [],
+      messages: {},
+      activeChat: null,
+      activeChatType: null,
+      typingStates: {},
+      currentUserTyping: {},
       connectionHealth: {
-        ...state.connectionHealth,
+        isHealthy: true,
+        lastPing: null,
+        reconnectAttempts: 0,
+        maxReconnectAttempts: 5,
+        pingInterval: null,
+        reconnectTimeout: null,
         intentionalDisconnect: false,
       }
-    }));
+    });
 
     try {
       const xmppClient = client({
@@ -61,7 +73,7 @@ export const createConnectionModule = (set: any, get: any) => ({
         );
         xmppClient.send(mamQuery);
         
-        // Fetch roster (contact list)
+        // Fetch roster (contact list) fresh from server
         const rosterIq = xml(
           'iq',
           { type: 'get', id: 'roster-1' },
@@ -69,7 +81,7 @@ export const createConnectionModule = (set: any, get: any) => ({
         );
         xmppClient.send(rosterIq);
         
-        // Discover MUC rooms on the conference server
+        // Discover MUC rooms on the conference server fresh from server
         const discoIq = xml(
           'iq',
           { type: 'get', to: 'conference.ejabberd.voicehost.io', id: 'disco-rooms' },
@@ -137,10 +149,15 @@ export const createConnectionModule = (set: any, get: any) => ({
     if (client) {
       client.stop();
     }
+    
+    // Clear all dynamic data on disconnect to ensure fresh state on next connection
     set({ 
       isConnected: false, 
       client: null, 
       currentUser: '',
+      contacts: [],
+      rooms: [],
+      messages: {},
       activeChat: null,
       activeChatType: null,
       typingStates: {},

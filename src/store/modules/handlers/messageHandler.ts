@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Message, Contact, Room, PollData } from '../../types';
 
@@ -9,6 +8,59 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
   const type = stanza.attrs.type || 'chat';
   const id = stanza.attrs.id;
   const body = stanza.getChildText('body');
+
+  // Handle MAM (Message Archive Management) results for message history
+  if (stanza.is('message') && stanza.getChild('result', 'urn:xmpp:mam:2')) {
+    const result = stanza.getChild('result', 'urn:xmpp:mam:2');
+    const forwarded = result?.getChild('forwarded', 'urn:xmpp:forward:0');
+    const originalMessage = forwarded?.getChild('message');
+    
+    if (originalMessage && originalMessage.getChildText('body')) {
+      const mamFrom = originalMessage.attrs.from;
+      const mamTo = originalMessage.attrs.to;
+      const mamBody = originalMessage.getChildText('body');
+      const mamType = originalMessage.attrs.type || 'chat';
+      const mamId = originalMessage.attrs.id || `mam-${Date.now()}`;
+      
+      // Extract timestamp from delay element
+      const delay = forwarded?.getChild('delay', 'urn:xmpp:delay');
+      const timestamp = delay ? new Date(delay.attrs.stamp) : new Date();
+      
+      const message: Message = {
+        id: mamId,
+        from: mamFrom,
+        to: mamTo,
+        body: mamBody,
+        timestamp,
+        type: mamType as 'chat' | 'groupchat',
+        status: 'delivered' // MAM messages are considered delivered
+      };
+
+      const chatJid = mamType === 'groupchat' ? mamFrom.split('/')[0] : 
+                     (mamFrom.includes(currentUser.split('@')[0]) ? mamTo.split('/')[0] : mamFrom.split('/')[0]);
+      
+      set((state: any) => {
+        const existingMessages = state.messages[chatJid] || [];
+        // Avoid duplicates by checking if message already exists
+        const messageExists = existingMessages.some((msg: Message) => msg.id === mamId);
+        
+        if (!messageExists) {
+          const updatedMessages = [...existingMessages, message].sort((a, b) => 
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          
+          return {
+            messages: {
+              ...state.messages,
+              [chatJid]: updatedMessages
+            }
+          };
+        }
+        return state;
+      });
+    }
+    return;
+  }
 
   // Handle poll votes
   const pollVote = stanza.getChild('poll-vote', 'urn:xmpp:poll');
@@ -224,12 +276,25 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
 
     const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
     
-    set((state: any) => ({
-      messages: {
-        ...state.messages,
-        [chatJid]: [...(state.messages[chatJid] || []), message]
+    set((state: any) => {
+      const existingMessages = state.messages[chatJid] || [];
+      // Check for duplicates to avoid adding same message twice
+      const messageExists = existingMessages.some((msg: Message) => 
+        msg.id === message.id || 
+        (msg.from === message.from && msg.body === message.body && 
+         Math.abs(new Date(msg.timestamp).getTime() - message.timestamp.getTime()) < 1000)
+      );
+      
+      if (!messageExists) {
+        return {
+          messages: {
+            ...state.messages,
+            [chatJid]: [...existingMessages, message]
+          }
+        };
       }
-    }));
+      return state;
+    });
 
     // Show desktop notification for new message
     showMessageNotification(from, body, type as 'chat' | 'groupchat');

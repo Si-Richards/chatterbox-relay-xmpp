@@ -64,9 +64,7 @@ export const useXMPPStore = create<XMPPState>()(
     {
       name: 'xmpp-store',
       partialize: (state) => ({
-        messages: state.messages,
-        contacts: state.contacts,
-        rooms: state.rooms,
+        // Only persist user preferences, not dynamic chat data
         userAvatar: state.userAvatar,
         userStatus: state.userStatus,
         contactSortMethod: state.contactSortMethod,
@@ -74,26 +72,18 @@ export const useXMPPStore = create<XMPPState>()(
         notificationSettings: state.notificationSettings
       }),
       onRehydrateStorage: () => (state) => {
-        if (state?.messages) {
-          const messagesWithDates = Object.fromEntries(
-            Object.entries(state.messages).map(([chatJid, messages]) => [
-              chatJid,
-              messages.map(msg => ({
-                ...msg,
-                timestamp: typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp
-              }))
-            ])
-          );
-          state.messages = messagesWithDates;
-        }
-        
-        if (state?.contacts) {
-          state.contacts = state.contacts.map(contact => ({
-            ...contact,
-            lastSeen: contact.lastSeen 
-              ? (typeof contact.lastSeen === 'string' ? new Date(contact.lastSeen) : contact.lastSeen)
-              : undefined
-          }));
+        // Clear any cached dynamic data on rehydration to ensure fresh server data
+        if (state) {
+          state.contacts = [];
+          state.rooms = [];
+          state.messages = {};
+          state.activeChat = null;
+          state.activeChatType = null;
+          state.typingStates = {};
+          state.currentUserTyping = {};
+          state.isConnected = false;
+          state.currentUser = '';
+          state.client = null;
         }
       }
     }
