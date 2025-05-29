@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -13,6 +12,7 @@ import { ActionButtonsRow } from './ActionButtonsRow';
 import { SearchBar } from './SearchBar';
 import { ContactsList } from './ContactsList';
 import { RoomsList } from './RoomsList';
+import { ConnectionStatus } from './ConnectionStatus';
 
 export const Sidebar = () => {
   const { addContact, joinRoom, setActiveChat } = useXMPPStore();
@@ -67,6 +67,8 @@ export const Sidebar = () => {
 
   return (
     <div className="w-80 flex-shrink-0 border-r bg-gray-50 border-gray-200 flex flex-col">
+      <ConnectionStatus />
+      
       <UserInfoSection />
 
       <ActionButtonsRow

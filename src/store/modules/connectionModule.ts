@@ -1,4 +1,3 @@
-
 import { client, xml } from '@xmpp/client';
 import { XMPPState } from '../types';
 
@@ -14,10 +13,14 @@ export const createConnectionModule = (set: any, get: any) => ({
 
       xmppClient.on('error', (err: any) => {
         console.error('XMPP Error:', err);
+        const { handleConnectionUnhealthy } = get();
+        handleConnectionUnhealthy();
       });
 
       xmppClient.on('offline', () => {
         set({ isConnected: false });
+        const { stopConnectionHealthCheck } = get();
+        stopConnectionHealthCheck();
       });
 
       xmppClient.on('online', (address: any) => {
@@ -27,6 +30,11 @@ export const createConnectionModule = (set: any, get: any) => ({
           currentUser: address.toString(),
           client: xmppClient 
         });
+        
+        // Start health monitoring
+        const { startConnectionHealthCheck, startPeriodicRoomRefresh } = get();
+        startConnectionHealthCheck();
+        startPeriodicRoomRefresh();
         
         // Send initial presence
         xmppClient.send(xml('presence'));
@@ -67,6 +75,13 @@ export const createConnectionModule = (set: any, get: any) => ({
       });
 
       xmppClient.on('stanza', (stanza: any) => {
+        // Handle ping responses
+        if (stanza.is('iq') && stanza.attrs.type === 'result' && stanza.attrs.id?.startsWith('ping-')) {
+          const { handlePingResponse } = get();
+          handlePingResponse();
+          return;
+        }
+
         // Handle presence subscription requests
         if (stanza.is('presence') && stanza.attrs.type === 'subscribe') {
           // Auto-accept subscription requests
@@ -92,7 +107,11 @@ export const createConnectionModule = (set: any, get: any) => ({
   },
   
   disconnect: () => {
-    const { client } = get();
+    const { client, stopConnectionHealthCheck, stopPeriodicRoomRefresh } = get();
+    
+    stopConnectionHealthCheck();
+    stopPeriodicRoomRefresh();
+    
     if (client) {
       client.stop();
     }

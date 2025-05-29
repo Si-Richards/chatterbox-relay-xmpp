@@ -86,7 +86,7 @@ export const createRoomModule = (set: any, get: any) => ({
   },
 
   deleteRoom: (roomJid: string) => {
-    const { client } = get();
+    const { client, removeDeletedRoomFromList } = get();
     if (!client) return;
 
     const destroyIq = xml(
@@ -99,14 +99,14 @@ export const createRoomModule = (set: any, get: any) => ({
 
     client.send(destroyIq);
 
-    set((state: any) => ({
-      rooms: state.rooms.filter((room: Room) => room.jid !== roomJid),
-      messages: Object.fromEntries(
-        Object.entries(state.messages).filter(([key]) => key !== roomJid)
-      ),
-      activeChat: state.activeChat === roomJid ? null : state.activeChat,
-      activeChatType: state.activeChat === roomJid ? null : state.activeChatType
-    }));
+    // Immediately remove from local state
+    removeDeletedRoomFromList(roomJid);
+    
+    // Refresh room list after a short delay to ensure server sync
+    setTimeout(() => {
+      const { refreshRooms } = get();
+      refreshRooms();
+    }, 2000);
   },
 
   updateRoomDescription: (roomJid: string, description: string) => {

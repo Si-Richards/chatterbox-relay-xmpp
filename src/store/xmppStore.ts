@@ -9,6 +9,8 @@ import { createTypingModule } from './modules/typingModule';
 import { createGeneralModule } from './modules/generalModule';
 import { createStanzaHandler } from './modules/stanzaHandler';
 import { createNotificationModule } from './modules/notificationModule';
+import { createConnectionHealthModule } from './modules/connectionHealthModule';
+import { createRoomRefreshModule } from './modules/roomRefreshModule';
 
 export * from './types';
 
@@ -29,6 +31,7 @@ export const useXMPPStore = create<XMPPState>()(
       roomSortMethod: 'newest',
       typingStates: {},
       currentUserTyping: {},
+      roomRefreshInterval: null,
       notificationSettings: {
         enabled: false,
         soundEnabled: true,
@@ -38,6 +41,8 @@ export const useXMPPStore = create<XMPPState>()(
       },
       
       ...createConnectionModule(set, get),
+      ...createConnectionHealthModule(set, get),
+      ...createRoomRefreshModule(set, get),
       ...createMessageModule(set, get),
       ...createPresenceModule(set, get),
       ...createRoomModule(set, get),
