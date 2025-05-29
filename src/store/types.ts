@@ -118,6 +118,7 @@ export interface XMPPState {
   setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
   setUserAvatar: (avatarUrl: string) => void;
   fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
+  searchUserByJid: (searchJid: string) => Promise<{ jid: string; name: string; } | null>;
 
   // Connection health methods
   startConnectionHealthCheck: () => void;
@@ -150,6 +151,7 @@ export interface XMPPState {
   deleteMessage: (chatJid: string, messageId: string) => void;
   markMessageAsDelivered: (from: string, id: string) => void;
   markMessageAsRead: (from: string, id: string) => void;
+  markMessagesAsRead: (chatJid: string) => void;
   addReaction: (chatJid: string, messageId: string, emoji: string) => void;
 
   // Presence methods
