@@ -1,5 +1,5 @@
 
-import { Contact, Room } from '../../types';
+import { Contact, Room, RoomAffiliation } from '../../types';
 
 export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
   const from = stanza.attrs.from;
@@ -21,22 +21,50 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
       // Check if this is the current user joining
       const isCurrentUser = nickname === currentUserNickname;
       
-      if (itemElement && isCurrentUser) {
-        const affiliation = itemElement.attrs.affiliation;
-        const role = itemElement.attrs.role;
+      if (itemElement) {
+        const affiliation = itemElement.attrs.affiliation || 'none';
+        const role = itemElement.attrs.role || 'none';
+        const jid = itemElement.attrs.jid || from;
         
-        console.log(`MUC presence for current user: affiliation=${affiliation}, role=${role}`);
+        console.log(`MUC presence: user=${nickname}, affiliation=${affiliation}, role=${role}, isCurrentUser=${isCurrentUser}`);
         
-        // Update room with current user's affiliation info
+        // Update room with affiliation info for any user
         set((state: any) => ({
           rooms: state.rooms.map((room: Room) => {
             if (room.jid === roomJid) {
-              const isOwner = affiliation === 'owner';
-              console.log(`Setting room ${roomJid} owner status: ${isOwner}`);
+              const affiliations = room.affiliations || [];
+              
+              // Find existing affiliation or create new one
+              const existingIndex = affiliations.findIndex(aff => 
+                aff.jid === jid || aff.jid === currentUser || aff.name === nickname
+              );
+              
+              const newAffiliation: RoomAffiliation = {
+                jid: jid,
+                name: nickname,
+                affiliation: affiliation as 'owner' | 'admin' | 'member' | 'none',
+                role: role as 'moderator' | 'participant' | 'visitor' | 'none'
+              };
+              
+              let updatedAffiliations;
+              if (existingIndex >= 0) {
+                updatedAffiliations = [...affiliations];
+                updatedAffiliations[existingIndex] = newAffiliation;
+              } else {
+                updatedAffiliations = [...affiliations, newAffiliation];
+              }
+              
+              // Set owner status for current user
+              const isOwner = isCurrentUser ? 
+                (affiliation === 'owner') : 
+                room.isOwner;
+              
+              console.log(`Updated room ${roomJid}: isOwner=${isOwner}, affiliations count=${updatedAffiliations.length}`);
+              
               return {
                 ...room,
                 isOwner,
-                affiliations: room.affiliations || []
+                affiliations: updatedAffiliations
               };
             }
             return room;

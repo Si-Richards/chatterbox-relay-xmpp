@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Room } from '../types';
 
@@ -76,6 +75,14 @@ export const createRoomModule = (set: any, get: any) => ({
     );
 
     client.send(presence);
+    
+    // Fetch affiliations after joining
+    setTimeout(() => {
+      const module = get();
+      if (module.fetchRoomAffiliations) {
+        module.fetchRoomAffiliations(roomJid);
+      }
+    }, 2000);
   },
 
   deleteRoom: (roomJid: string) => {
@@ -142,13 +149,17 @@ export const createRoomModule = (set: any, get: any) => ({
     const { client } = get();
     if (!client) return;
 
+    console.log('Fetching affiliations for room:', roomJid);
+
+    // Query for all affiliation types
     const affiliationQuery = xml(
       'iq',
       { type: 'get', to: roomJid, id: `affiliations-${Date.now()}` },
       xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
         xml('item', { affiliation: 'owner' }),
         xml('item', { affiliation: 'admin' }),
-        xml('item', { affiliation: 'member' })
+        xml('item', { affiliation: 'member' }),
+        xml('item', { affiliation: 'none' })
       )
     );
 
