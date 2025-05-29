@@ -82,6 +82,15 @@ export interface NotificationSettings {
   doNotDisturb: boolean;
 }
 
+export interface ConnectionHealth {
+  isHealthy: boolean;
+  lastPing: Date | null;
+  reconnectAttempts: number;
+  maxReconnectAttempts: number;
+  pingInterval: NodeJS.Timeout | null;
+  reconnectTimeout: NodeJS.Timeout | null;
+}
+
 export interface XMPPState {
   client: any;
   isConnected: boolean;
@@ -97,7 +106,9 @@ export interface XMPPState {
   roomSortMethod: 'newest' | 'alphabetical';
   typingStates: Record<string, TypingState[]>;
   currentUserTyping: Record<string, boolean>;
+  roomRefreshInterval: NodeJS.Timeout | null;
   notificationSettings: NotificationSettings;
+  connectionHealth: ConnectionHealth;
 
   // Connection methods
   connect: (username: string, password: string) => Promise<void>;
@@ -105,6 +116,22 @@ export interface XMPPState {
   setUserStatus: (status: 'online' | 'away' | 'dnd' | 'xa') => void;
   setUserAvatar: (avatarUrl: string) => void;
   fetchServerUsers: () => Promise<{ jid: string; name: string; }[]>;
+
+  // Connection health methods
+  startConnectionHealthCheck: () => void;
+  stopConnectionHealthCheck: () => void;
+  sendPing: () => void;
+  handlePingResponse: () => void;
+  handleConnectionUnhealthy: () => void;
+  attemptReconnect: () => void;
+  manualReconnect: () => void;
+
+  // Room refresh methods
+  refreshRooms: () => Promise<void>;
+  removeDeletedRoomFromList: (roomJid: string) => void;
+  syncRoomList: (serverRooms: any[]) => void;
+  startPeriodicRoomRefresh: () => void;
+  stopPeriodicRoomRefresh: () => void;
 
   // Message methods
   sendMessage: (to: string, body: string, type: 'chat' | 'groupchat') => void;
