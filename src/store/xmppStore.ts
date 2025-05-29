@@ -12,6 +12,7 @@ import { createStanzaHandler } from './modules/stanzaHandler';
 import { createNotificationModule } from './modules/notificationModule';
 import { createConnectionHealthModule } from './modules/connectionHealthModule';
 import { createRoomRefreshModule } from './modules/roomRefreshModule';
+import { createOMEMOModule } from './modules/omemoModule';
 
 export * from './types';
 
@@ -59,7 +60,8 @@ export const useXMPPStore = create<XMPPState>()(
       ...createTypingModule(set, get),
       ...createGeneralModule(set, get),
       ...createStanzaHandler(set, get),
-      ...createNotificationModule(set, get)
+      ...createNotificationModule(set, get),
+      ...createOMEMOModule(set, get)
     }),
     {
       name: 'xmpp-store',

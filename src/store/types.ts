@@ -1,4 +1,3 @@
-
 export interface MessageReaction {
   emoji: string;
   users: string[];
@@ -32,6 +31,8 @@ export interface Message {
   type: 'chat' | 'groupchat';
   status?: 'sent' | 'delivered' | 'read';
   reactions?: MessageReaction[];
+  isEncrypted?: boolean;
+  encryptionType?: 'omemo' | 'pgp';
   fileData?: {
     name: string;
     type: string;
@@ -179,4 +180,11 @@ export interface XMPPState {
 
   // Notification methods
   updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
+
+  // OMEMO methods
+  detectOMEMOMessage: (stanza: any) => boolean;
+  handleOMEMOMessage: (stanza: any) => { isEncrypted: boolean; fallbackBody?: string };
+  encryptMessage: (body: string, recipientJid: string) => Promise<any>;
+  isOMEMOSupported: (jid: string) => boolean;
+  getOMEMODevices: (jid: string) => any[];
 }

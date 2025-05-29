@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings, Users, UserPlus } from 'lucide-react';
+import { Send, Hash, User, MessageSquare, Check, Bold, Italic, Type, Edit2, Save, X, Settings, Users, UserPlus, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
@@ -447,6 +447,12 @@ export const ChatArea = () => {
                 {!isOwn && activeChatType === 'groupchat' && <p className="text-xs font-medium mb-1 text-blue-600">
                     {senderName}
                   </p>}
+                
+                {/* Encryption indicator */}
+                {message.isEncrypted && <div className={`flex items-center space-x-1 mb-1 text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                    <Lock className="h-3 w-3" />
+                    <span>OMEMO Encrypted</span>
+                  </div>}
                 
                 {message.fileData ? <div className="space-y-2">
                     {message.fileData.type.startsWith('image/') ? <img src={message.fileData.url} alt={message.fileData.name} className="max-w-xs rounded" style={{

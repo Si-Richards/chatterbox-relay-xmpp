@@ -1,8 +1,9 @@
+
 import { xml } from '@xmpp/client';
 import { Message, Contact, Room, PollData } from '../../types';
 
 export const handleMessageStanza = (stanza: any, set: any, get: any) => {
-  const { currentUser, markMessageAsDelivered, setChatState, clearTypingState, showMessageNotification } = get();
+  const { currentUser, markMessageAsDelivered, setChatState, clearTypingState, showMessageNotification, detectOMEMOMessage, handleOMEMOMessage } = get();
   const from = stanza.attrs.from;
   const to = stanza.attrs.to;
   const type = stanza.attrs.type || 'chat';
@@ -25,15 +26,20 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
       // Extract timestamp from delay element
       const delay = forwarded?.getChild('delay', 'urn:xmpp:delay');
       const timestamp = delay ? new Date(delay.attrs.stamp) : new Date();
+
+      // Check if MAM message is OMEMO encrypted
+      const omemoInfo = handleOMEMOMessage(originalMessage);
       
       const message: Message = {
         id: mamId,
         from: mamFrom,
         to: mamTo,
-        body: mamBody,
+        body: omemoInfo.isEncrypted ? (omemoInfo.fallbackBody || mamBody) : mamBody,
         timestamp,
         type: mamType as 'chat' | 'groupchat',
-        status: 'delivered' // MAM messages are considered delivered
+        status: 'delivered', // MAM messages are considered delivered
+        isEncrypted: omemoInfo.isEncrypted,
+        encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
       };
 
       const chatJid = mamType === 'groupchat' ? mamFrom.split('/')[0] : 
@@ -230,6 +236,9 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
     const fileElement = stanza.getChild('file', 'urn:xmpp:file-transfer');
     const pollElement = stanza.getChild('poll', 'urn:xmpp:poll');
     
+    // Check for OMEMO encryption
+    const omemoInfo = handleOMEMOMessage(stanza);
+    
     let fileData = null;
     let pollData: PollData | null = null;
     
@@ -267,11 +276,13 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
       id: id || `msg-${Date.now()}`,
       from,
       to,
-      body,
+      body: omemoInfo.isEncrypted ? (omemoInfo.fallbackBody || body) : body,
       timestamp: new Date(),
       type: type as 'chat' | 'groupchat',
       fileData,
-      pollData
+      pollData,
+      isEncrypted: omemoInfo.isEncrypted,
+      encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
     };
 
     const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
@@ -297,7 +308,7 @@ export const handleMessageStanza = (stanza: any, set: any, get: any) => {
     });
 
     // Show desktop notification for new message
-    showMessageNotification(from, body, type as 'chat' | 'groupchat');
+    showMessageNotification(from, omemoInfo.isEncrypted ? '🔒 Encrypted message' : body, type as 'chat' | 'groupchat');
 
     // Send delivery receipt
     if (id && stanza.getChild('request', 'urn:xmpp:receipts')) {
