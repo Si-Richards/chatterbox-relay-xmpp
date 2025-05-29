@@ -1,73 +1,173 @@
-# Welcome to your Lovable project
 
-## Project info
+# XMPP Chat Application
 
-**URL**: https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897
+A modern, real-time chat application built with React and XMPP protocol, featuring end-to-end encryption, file sharing, and comprehensive messaging capabilities.
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+### Core Messaging
+- **Real-time messaging** with instant delivery and read receipts
+- **Direct chats** and **group chat rooms** (MUC - Multi-User Chat)
+- **Message status tracking** (sent, delivered, read)
+- **Typing indicators** with real-time chat state notifications
+- **Message reactions** with emoji support
+- **File sharing** with support for images, documents, and media
+- **Polls** with multiple choice options and real-time voting
 
-**Use Lovable**
+### Security & Privacy
+- **OMEMO encryption** support for end-to-end encrypted messaging
+- **Automatic encryption detection** and fallback handling
+- **Privacy-focused** design with secure message handling
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897) and start prompting.
+### User Management
+- **Contact management** with presence status tracking
+- **User discovery** and search capabilities
+- **Server user browsing** with JID-based search
+- **Automatic roster synchronization**
+- **Presence states** (online, away, do not disturb, extended away)
 
-Changes made via Lovable will be committed automatically to this repo.
+### Room Management
+- **Create and manage chat rooms** with custom configurations
+- **Room permissions** and affiliation management (owner, admin, member)
+- **Persistent rooms** with configurable privacy settings
+- **Room descriptions** and avatar support
+- **Real-time participant tracking**
 
-**Use your preferred IDE**
+### Advanced Features
+- **Message Archive Management (MAM)** for message history synchronization
+- **Connection health monitoring** with automatic reconnection
+- **Push notifications** with customizable settings
+- **Offline message handling** and synchronization
+- **Responsive design** optimized for desktop and mobile
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🏗️ Architecture
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Frontend Stack
+- **React 18** with TypeScript for type-safe development
+- **Vite** for fast development and optimized builds
+- **Tailwind CSS** for responsive, utility-first styling
+- **shadcn/ui** component library for consistent UI elements
+- **Zustand** for global state management with persistence
 
-Follow these steps:
+### XMPP Integration
+- **@xmpp/client** for WebSocket-based XMPP connections
+- **ejabberd server** integration (ejabberd.voicehost.io)
+- **XEP compliance** for standard XMPP extensions:
+  - XEP-0085: Chat State Notifications (typing indicators)
+  - XEP-0184: Message Delivery Receipts
+  - XEP-0313: Message Archive Management (MAM)
+  - XEP-0384: OMEMO Encryption
+  - XEP-0045: Multi-User Chat (MUC)
 
+### State Management
+- **Modular store architecture** with specialized modules:
+  - Connection management and health monitoring
+  - Message handling and synchronization
+  - Presence and contact management
+  - Room and MUC operations
+  - Typing indicators and chat states
+  - Notification system
+  - OMEMO encryption handling
+
+### Key Components
+- **ChatInterface**: Main application layout with sidebar and chat area
+- **Sidebar**: Contact and room management with search functionality
+- **ChatArea**: Message display, input, and real-time interactions
+- **Connection management**: Automatic reconnection and health checks
+- **Stanza handlers**: Protocol-specific message processing
+
+## 🛠️ Technical Features
+
+### Connection Management
+- **WebSocket connections** with automatic reconnection
+- **Connection health monitoring** with ping/pong mechanisms
+- **Graceful error handling** and connection recovery
+- **Session persistence** with state restoration
+
+### Message Processing
+- **Real-time stanza handling** for all XMPP message types
+- **MAM integration** for message history synchronization
+- **Receipt tracking** for delivery and read confirmations
+- **Chat state processing** for typing indicators
+- **File attachment handling** with out-of-band (OOB) data
+
+### Data Persistence
+- **Local storage integration** with Zustand persistence
+- **Read status tracking** across sessions
+- **User preferences** and notification settings
+- **Connection state restoration**
+
+## 🔧 Development
+
+### Prerequisites
+- Node.js & npm (install with [nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
+
+### Setup
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Navigate to project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
+# Install dependencies
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Available Scripts
+- `npm run dev` - Start development server with hot reload
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build locally
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🌐 Deployment
 
-**Use GitHub Codespaces**
+### Lovable Platform
+Simply open [Lovable](https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897) and click Share → Publish.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Custom Domain
+Connect your custom domain through Project → Settings → Domains in Lovable.
 
-## What technologies are used for this project?
+### Self-Hosting
+The application can be deployed to any static hosting service:
+- Build the project with `npm run build`
+- Deploy the `dist` folder to your hosting provider
+- Configure environment variables as needed
 
-This project is built with:
+## 🔗 XMPP Server Configuration
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+The application is configured to connect to:
+- **Server**: ejabberd.voicehost.io
+- **WebSocket endpoint**: wss://ejabberd.voicehost.io:443/websocket
+- **Conference service**: conference.ejabberd.voicehost.io
 
-## How can I deploy this project?
+### Required Server Features
+- WebSocket connections (RFC 7395)
+- Message Archive Management (XEP-0313)
+- Multi-User Chat (XEP-0045)
+- Service Discovery (XEP-0030)
+- Message Delivery Receipts (XEP-0184)
+- Chat State Notifications (XEP-0085)
 
-Simply open [Lovable](https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897) and click on Share -> Publish.
+## 📱 Browser Support
 
-## Can I connect a custom domain to my Lovable project?
+- Modern browsers with WebSocket support
+- Chrome, Firefox, Safari, Edge (latest versions)
+- Mobile browsers on iOS and Android
 
-Yes, you can!
+## 🔐 Security Considerations
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- OMEMO encryption for end-to-end security
+- Secure WebSocket connections (WSS)
+- No sensitive data stored in local storage
+- Automatic session cleanup on disconnect
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## 📄 License
+
+This project is built with modern web technologies and follows best practices for real-time communication applications.
+
+---
+
+**Project URL**: https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897
