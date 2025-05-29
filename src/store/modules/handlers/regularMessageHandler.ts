@@ -97,7 +97,7 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
     type,
     fileData,
     isEncrypted,
-    status: 'received'
+    status: 'delivered'
   };
 
   console.log('Adding regular message:', {
