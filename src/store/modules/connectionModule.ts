@@ -1,3 +1,4 @@
+
 import { client, xml } from '@xmpp/client';
 import { XMPPState } from '../types';
 
@@ -155,10 +156,11 @@ export const createConnectionModule = (set: any, get: any) => ({
     return new Promise<{ jid: string; name: string; }[]>((resolve, reject) => {
       const queryId = `users-${Date.now()}`;
       
+      // Try to get user list from the server's user directory
       const iq = xml(
         'iq',
         { type: 'get', to: 'ejabberd.voicehost.io', id: queryId },
-        xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+        xml('query', { xmlns: 'http://jabber.org/protocol/disco#items', node: 'users' })
       );
 
       const handleResponse = (stanza: any) => {
@@ -173,7 +175,22 @@ export const createConnectionModule = (set: any, get: any) => ({
               const items = query.getChildren('item');
               items.forEach((item: any) => {
                 const jid = item.attrs.jid;
-                if (jid && jid.includes('@ejabberd.voicehost.io') && !jid.includes('conference')) {
+                // Filter to only include actual user accounts, not system modules
+                if (jid && jid.includes('@ejabberd.voicehost.io') && 
+                    !jid.includes('conference') && 
+                    !jid.includes('proxy') && 
+                    !jid.includes('pubsub') && 
+                    !jid.includes('upload') &&
+                    !jid.includes('muc') &&
+                    !jid.includes('irc') &&
+                    !jid.includes('vjud') &&
+                    !jid.includes('api') &&
+                    !jid.includes('admin') &&
+                    !jid.includes('mod_') &&
+                    !jid.includes('system') &&
+                    // Only include if it looks like a real username (no dots, underscores in system names)
+                    !jid.split('@')[0].includes('.') &&
+                    jid.split('@')[0].length > 1) {
                   users.push({
                     jid: jid,
                     name: jid.split('@')[0]
@@ -182,22 +199,36 @@ export const createConnectionModule = (set: any, get: any) => ({
               });
             }
             
-            resolve(users);
+            if (users.length > 0) {
+              const currentUser = get().currentUser;
+              const filteredUsers = users.filter(user => user.jid !== currentUser);
+              resolve(filteredUsers);
+            } else {
+              // Fallback to common usernames if server doesn't return user list
+              const commonUsers: { jid: string; name: string; }[] = [
+                { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
+                { jid: 'test@ejabberd.voicehost.io', name: 'test' },
+                { jid: 'user@ejabberd.voicehost.io', name: 'user' },
+                { jid: 'guest@ejabberd.voicehost.io', name: 'guest' },
+                { jid: 'support@ejabberd.voicehost.io', name: 'support' }
+              ];
+              
+              const currentUser = get().currentUser;
+              const filteredUsers = commonUsers.filter(user => user.jid !== currentUser);
+              resolve(filteredUsers);
+            }
           } else {
-            const mockUsers: { jid: string; name: string; }[] = [
-              { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
-              { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
-              { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
+            // Server doesn't support user listing, use fallback
+            const commonUsers: { jid: string; name: string; }[] = [
               { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
               { jid: 'test@ejabberd.voicehost.io', name: 'test' },
-              { jid: 'admin@ejabberd.voicehost.io', name: 'admin' },
-              { jid: 'support@ejabberd.voicehost.io', name: 'support' },
-              { jid: 'guest@ejabberd.voicehost.io', name: 'guest' }
+              { jid: 'user@ejabberd.voicehost.io', name: 'user' },
+              { jid: 'guest@ejabberd.voicehost.io', name: 'guest' },
+              { jid: 'support@ejabberd.voicehost.io', name: 'support' }
             ];
             
             const currentUser = get().currentUser;
-            const filteredUsers = mockUsers.filter(user => user.jid !== currentUser);
-            
+            const filteredUsers = commonUsers.filter(user => user.jid !== currentUser);
             resolve(filteredUsers);
           }
         }
@@ -206,22 +237,19 @@ export const createConnectionModule = (set: any, get: any) => ({
       client.on('stanza', handleResponse);
       client.send(iq);
       
+      // Timeout fallback
       setTimeout(() => {
         client.off('stanza', handleResponse);
-        const mockUsers: { jid: string; name: string; }[] = [
-          { jid: 'user1@ejabberd.voicehost.io', name: 'user1' },
-          { jid: 'user2@ejabberd.voicehost.io', name: 'user2' },
-          { jid: 'user3@ejabberd.voicehost.io', name: 'user3' },
+        const commonUsers: { jid: string; name: string; }[] = [
           { jid: 'demo@ejabberd.voicehost.io', name: 'demo' },
           { jid: 'test@ejabberd.voicehost.io', name: 'test' },
-          { jid: 'admin@ejabberd.voicehost.io', name: 'admin' },
-          { jid: 'support@ejabberd.voicehost.io', name: 'support' },
-          { jid: 'guest@ejabberd.voicehost.io', name: 'guest' }
+          { jid: 'user@ejabberd.voicehost.io', name: 'user' },
+          { jid: 'guest@ejabberd.voicehost.io', name: 'guest' },
+          { jid: 'support@ejabberd.voicehost.io', name: 'support' }
         ];
         
         const currentUser = get().currentUser;
-        const filteredUsers = mockUsers.filter(user => user.jid !== currentUser);
-        
+        const filteredUsers = commonUsers.filter(user => user.jid !== currentUser);
         resolve(filteredUsers);
       }, 5000);
     });

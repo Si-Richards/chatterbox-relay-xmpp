@@ -20,10 +20,13 @@ export const UserBrowser = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const filteredUsers = serverUsers.filter(user =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    !contacts.find(contact => contact.jid === user.jid)
-  );
+  // Filter users based on search and exclude existing contacts
+  const filteredUsers = serverUsers.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.jid.toLowerCase().includes(searchQuery.toLowerCase());
+    const notInContacts = !contacts.find(contact => contact.jid === user.jid);
+    return matchesSearch && notInContacts;
+  });
 
   const handleFetchUsers = async () => {
     if (!client) {
@@ -38,10 +41,28 @@ export const UserBrowser = () => {
     setIsLoading(true);
     try {
       const users = await fetchServerUsers();
-      setServerUsers(users);
+      // Additional filtering to ensure no system modules appear
+      const realUsers = users.filter(user => {
+        const username = user.jid.split('@')[0];
+        return !username.includes('operations') &&
+               !username.includes('conference') &&
+               !username.includes('proxy') &&
+               !username.includes('pubsub') &&
+               !username.includes('upload') &&
+               !username.includes('api') &&
+               !username.includes('announcements') &&
+               !username.includes('configuration') &&
+               !username.includes('management') &&
+               !username.includes('outgoing') &&
+               !username.includes('mod_') &&
+               username.length > 1 &&
+               !username.includes('.');
+      });
+      
+      setServerUsers(realUsers);
       toast({
         title: "Success",
-        description: `Found ${users.length} users on the server`
+        description: `Found ${realUsers.length} users on the server`
       });
     } catch (error) {
       toast({
@@ -61,6 +82,13 @@ export const UserBrowser = () => {
       description: `Added ${userJid.split('@')[0]} to your contacts`
     });
   };
+
+  // Auto-fetch users when component mounts
+  useEffect(() => {
+    if (client && serverUsers.length === 0) {
+      handleFetchUsers();
+    }
+  }, [client]);
 
   return (
     <div className="space-y-4">
@@ -85,12 +113,17 @@ export const UserBrowser = () => {
               {serverUsers.length === 0 ? (
                 <>
                   <User className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>Click "Refresh" to load users from the server</p>
+                  <p>Loading users from the server...</p>
+                </>
+              ) : searchQuery ? (
+                <>
+                  <User className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No users found matching "{searchQuery}"</p>
                 </>
               ) : (
                 <>
                   <User className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No users found matching your search</p>
+                  <p>All users are already in your contacts</p>
                 </>
               )}
             </div>
