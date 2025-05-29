@@ -19,17 +19,39 @@ export const handleIqStanza = (stanza: any, set: any, get: any) => {
     set({ contacts });
   }
   
-  // Handle room discovery
+  // Handle room discovery - only include actual conference rooms
   if (stanza.getChild('query', 'http://jabber.org/protocol/disco#items') && type === 'result') {
     const query = stanza.getChild('query', 'http://jabber.org/protocol/disco#items');
     const items = query.getChildren('item');
     
-    const rooms: Room[] = items.map((item: any) => ({
-      jid: item.attrs.jid,
-      name: item.attrs.name || item.attrs.jid.split('@')[0],
-      participants: [],
-      isOwner: false
-    }));
+    // Filter to only include conference rooms, not system modules
+    const rooms: Room[] = items
+      .filter((item: any) => {
+        const jid = item.attrs.jid;
+        // Only include JIDs that are actual conference rooms
+        return jid && 
+               jid.includes('@conference.ejabberd.voicehost.io') &&
+               !jid.includes('announcements') &&
+               !jid.includes('operations') &&
+               !jid.includes('configuration') &&
+               !jid.includes('management') &&
+               !jid.includes('outgoing') &&
+               !jid.includes('proxy') &&
+               !jid.includes('pubsub') &&
+               !jid.includes('upload') &&
+               !jid.includes('api') &&
+               !jid.includes('mod_') &&
+               !jid.includes('system') &&
+               // Ensure it's not a system component
+               !jid.split('@')[0].includes('.') &&
+               jid.split('@')[0].length > 1;
+      })
+      .map((item: any) => ({
+        jid: item.attrs.jid,
+        name: item.attrs.name || item.attrs.jid.split('@')[0],
+        participants: [],
+        isOwner: false
+      }));
     
     if (rooms.length > 0) {
       set((state: any) => ({

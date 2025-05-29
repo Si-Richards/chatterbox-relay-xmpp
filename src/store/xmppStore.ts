@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { XMPPState, Message, Contact } from './types';
@@ -38,6 +39,15 @@ export const useXMPPStore = create<XMPPState>()(
         showForDirectMessages: true,
         showForGroupMessages: true,
         doNotDisturb: false,
+      },
+      connectionHealth: {
+        isHealthy: true,
+        lastPing: null,
+        reconnectAttempts: 0,
+        maxReconnectAttempts: 5,
+        pingInterval: null,
+        reconnectTimeout: null,
+        intentionalDisconnect: false,
       },
       
       ...createConnectionModule(set, get),

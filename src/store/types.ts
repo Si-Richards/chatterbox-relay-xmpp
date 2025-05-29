@@ -89,6 +89,7 @@ export interface ConnectionHealth {
   maxReconnectAttempts: number;
   pingInterval: NodeJS.Timeout | null;
   reconnectTimeout: NodeJS.Timeout | null;
+  intentionalDisconnect: boolean;
 }
 
 export interface XMPPState {

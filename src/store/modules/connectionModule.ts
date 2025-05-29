@@ -3,6 +3,14 @@ import { XMPPState } from '../types';
 
 export const createConnectionModule = (set: any, get: any) => ({
   connect: async (username: string, password: string) => {
+    // Clear intentional disconnect flag when connecting
+    set((state: any) => ({
+      connectionHealth: {
+        ...state.connectionHealth,
+        intentionalDisconnect: false,
+      }
+    }));
+
     try {
       const xmppClient = client({
         service: 'wss://ejabberd.voicehost.io:443/websocket',
@@ -108,6 +116,14 @@ export const createConnectionModule = (set: any, get: any) => ({
   
   disconnect: () => {
     const { client, stopConnectionHealthCheck, stopPeriodicRoomRefresh } = get();
+    
+    // Set intentional disconnect flag to prevent auto-reconnection
+    set((state: any) => ({
+      connectionHealth: {
+        ...state.connectionHealth,
+        intentionalDisconnect: true,
+      }
+    }));
     
     stopConnectionHealthCheck();
     stopPeriodicRoomRefresh();
