@@ -61,21 +61,82 @@ export const useXMPPStore = create<XMPPState>()(
       ...createGeneralModule(set, get),
       ...createStanzaHandler(set, get),
       ...createNotificationModule(set, get),
-      ...createOMEMOModule(set, get)
+      ...createOMEMOModule(set, get),
+
+      // Add method to mark messages as read
+      markMessagesAsRead: (chatJid: string) => {
+        const { client, currentUser } = get();
+        
+        set((state: any) => {
+          const chatMessages = state.messages[chatJid] || [];
+          const updatedMessages = chatMessages.map((msg: Message) => {
+            // Only mark messages from others as read, and send read receipts
+            if (msg.from !== currentUser && 
+                !msg.from.includes(currentUser.split('@')[0]) && 
+                msg.status !== 'read' && 
+                msg.id) {
+              
+              // Send read receipt
+              if (client && msg.type !== 'groupchat') {
+                const readReceipt = {
+                  type: 'message',
+                  attrs: {
+                    to: msg.from,
+                    from: currentUser,
+                    id: `read-${Date.now()}`
+                  },
+                  children: [
+                    {
+                      name: 'read',
+                      attrs: { xmlns: 'urn:xmpp:receipts', id: msg.id },
+                      children: []
+                    }
+                  ]
+                };
+                
+                console.log('Sending read receipt for message:', msg.id);
+                client.send(readReceipt);
+              }
+              
+              return { ...msg, status: 'read' as const };
+            }
+            return msg;
+          });
+
+          return {
+            messages: {
+              ...state.messages,
+              [chatJid]: updatedMessages
+            }
+          };
+        });
+      }
     }),
     {
       name: 'xmpp-store',
       partialize: (state) => ({
-        // Only persist user preferences, not dynamic chat data
+        // Only persist user preferences and read message status
         userAvatar: state.userAvatar,
         userStatus: state.userStatus,
         contactSortMethod: state.contactSortMethod,
         roomSortMethod: state.roomSortMethod,
-        notificationSettings: state.notificationSettings
+        notificationSettings: state.notificationSettings,
+        // Persist message read status
+        messageReadStatus: Object.keys(state.messages).reduce((acc, chatJid) => {
+          acc[chatJid] = (state.messages[chatJid] || []).reduce((msgAcc: any, msg: Message) => {
+            if (msg.status === 'read') {
+              msgAcc[msg.id] = 'read';
+            }
+            return msgAcc;
+          }, {});
+          return acc;
+        }, {} as Record<string, Record<string, string>>)
       }),
       onRehydrateStorage: () => (state) => {
-        // Clear any cached dynamic data on rehydration to ensure fresh server data
+        // Clear dynamic data but preserve read status
         if (state) {
+          const messageReadStatus = (state as any).messageReadStatus || {};
+          
           state.contacts = [];
           state.rooms = [];
           state.messages = {};
@@ -86,6 +147,9 @@ export const useXMPPStore = create<XMPPState>()(
           state.isConnected = false;
           state.currentUser = '';
           state.client = null;
+          
+          // Store read status for later restoration
+          (state as any).pendingReadStatus = messageReadStatus;
         }
       }
     }

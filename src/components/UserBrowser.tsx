@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { UserPlus, Search, User } from 'lucide-react';
+import { UserPlus, Search, User, RefreshCw } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 
@@ -15,10 +15,11 @@ interface ServerUser {
 }
 
 export const UserBrowser = () => {
-  const { client, contacts, addContact, fetchServerUsers } = useXMPPStore();
+  const { client, contacts, addContact, fetchServerUsers, searchUserByJid } = useXMPPStore();
   const [serverUsers, setServerUsers] = useState<ServerUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Filter users based on search and exclude existing contacts
   const filteredUsers = serverUsers.filter(user => {
@@ -41,29 +42,19 @@ export const UserBrowser = () => {
     setIsLoading(true);
     try {
       const users = await fetchServerUsers();
-      // Additional filtering to ensure no system modules appear
-      const realUsers = users.filter(user => {
-        const username = user.jid.split('@')[0];
-        return !username.includes('operations') &&
-               !username.includes('conference') &&
-               !username.includes('proxy') &&
-               !username.includes('pubsub') &&
-               !username.includes('upload') &&
-               !username.includes('api') &&
-               !username.includes('announcements') &&
-               !username.includes('configuration') &&
-               !username.includes('management') &&
-               !username.includes('outgoing') &&
-               !username.includes('mod_') &&
-               username.length > 1 &&
-               !username.includes('.');
-      });
+      setServerUsers(users);
       
-      setServerUsers(realUsers);
-      toast({
-        title: "Success",
-        description: `Found ${realUsers.length} users on the server`
-      });
+      if (users.length === 0) {
+        toast({
+          title: "No Users Found",
+          description: "No users were found on the server. Try searching for specific users by JID."
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Found ${users.length} users on the server`
+        });
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -72,6 +63,44 @@ export const UserBrowser = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSearchUser = async () => {
+    if (!searchQuery.trim() || !client) return;
+    
+    setIsSearching(true);
+    try {
+      const user = await searchUserByJid(searchQuery.trim());
+      if (user) {
+        // Add to server users list if not already there
+        setServerUsers(prev => {
+          const exists = prev.find(u => u.jid === user.jid);
+          if (!exists) {
+            return [...prev, user];
+          }
+          return prev;
+        });
+        
+        toast({
+          title: "User Found",
+          description: `Found user: ${user.name}`
+        });
+      } else {
+        toast({
+          title: "User Not Found",
+          description: `No user found with JID: ${searchQuery}`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Search Error",
+        description: "Failed to search for user",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -90,19 +119,33 @@ export const UserBrowser = () => {
     }
   }, [client]);
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearchUser();
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <Input
-          type="text"
-          placeholder="Search users..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1"
-        />
-        <Button onClick={handleFetchUsers} disabled={isLoading}>
-          <Search className="h-4 w-4 mr-2" />
-          {isLoading ? 'Loading...' : 'Refresh'}
+      <div className="space-y-2">
+        <div className="flex items-center space-x-2">
+          <Input
+            type="text"
+            placeholder="Search users or enter JID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            className="flex-1"
+          />
+          <Button onClick={handleSearchUser} disabled={isSearching || !searchQuery.trim()}>
+            <Search className="h-4 w-4 mr-2" />
+            {isSearching ? 'Searching...' : 'Search'}
+          </Button>
+        </div>
+        
+        <Button onClick={handleFetchUsers} disabled={isLoading} variant="outline" className="w-full">
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          {isLoading ? 'Loading...' : 'Refresh Server Users'}
         </Button>
       </div>
 
@@ -113,7 +156,9 @@ export const UserBrowser = () => {
               {serverUsers.length === 0 ? (
                 <>
                   <User className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>Loading users from the server...</p>
+                  <p className="mb-2">No users found on server</p>
+                  <p className="text-sm">Try searching for specific users by entering their JID</p>
+                  <p className="text-xs mt-1 text-gray-400">Example: username@ejabberd.voicehost.io</p>
                 </>
               ) : searchQuery ? (
                 <>

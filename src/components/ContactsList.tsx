@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,7 +27,8 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     activeChat, 
     currentUser,
     contactSortMethod,
-    setContactSortMethod
+    setContactSortMethod,
+    markMessagesAsRead
   } = useXMPPStore();
 
   // Function to get last message timestamp for a chat
@@ -100,6 +100,16 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     ).length;
   };
 
+  // Handle chat click and mark messages as read
+  const handleChatClick = (chatJid: string, type: 'chat' | 'groupchat') => {
+    onChatClick(chatJid, type);
+    
+    // Mark messages as read when opening the chat
+    setTimeout(() => {
+      markMessagesAsRead(chatJid);
+    }, 100);
+  };
+
   const filteredContacts = getSortedContacts();
 
   return (
@@ -141,7 +151,7 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                 className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
                   isActive ? 'bg-blue-50 border-blue-200' : ''
                 }`}
-                onClick={() => onChatClick(contact.jid, 'chat')}
+                onClick={() => handleChatClick(contact.jid, 'chat')}
               >
                 <CardContent className="p-3 flex items-center space-x-2">
                   <div className="relative">

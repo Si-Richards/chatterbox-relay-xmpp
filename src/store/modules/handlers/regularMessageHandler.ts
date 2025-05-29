@@ -115,6 +115,25 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
     }
   }));
 
+  // Send delivery receipt for incoming messages (but not for group chats from ourselves)
+  const { client } = get();
+  if (client && id && type !== 'groupchat') {
+    const receipt = stanza.clone();
+    receipt.attrs.to = receipt.attrs.from;
+    receipt.attrs.from = receipt.attrs.to;
+    receipt.attrs.id = `receipt-${Date.now()}`;
+    receipt.children = [
+      {
+        name: 'received',
+        attrs: { xmlns: 'urn:xmpp:receipts', id: id },
+        children: []
+      }
+    ];
+    
+    console.log('Sending delivery receipt for message:', id);
+    client.send(receipt);
+  }
+
   // Trigger notifications for incoming messages
   const { triggerNotification } = get();
   if (triggerNotification) {

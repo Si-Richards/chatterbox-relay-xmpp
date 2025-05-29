@@ -29,6 +29,13 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
   // Check if MAM message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(originalMessage);
   
+  // Get read status from persisted storage
+  const state = get();
+  const pendingReadStatus = (state as any).pendingReadStatus || {};
+  const chatJid = mamType === 'groupchat' ? mamFrom.split('/')[0] : 
+                 (mamFrom.includes(currentUser.split('@')[0]) ? mamTo.split('/')[0] : mamFrom.split('/')[0]);
+  const isRead = pendingReadStatus[chatJid]?.[mamId] === 'read';
+  
   const message: Message = {
     id: mamId,
     from: mamFrom,
@@ -36,13 +43,10 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
     body: omemoInfo.isEncrypted ? (omemoInfo.fallbackBody || mamBody) : mamBody,
     timestamp,
     type: mamType as 'chat' | 'groupchat',
-    status: 'delivered',
+    status: isRead ? 'read' : 'delivered',
     isEncrypted: omemoInfo.isEncrypted,
     encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
   };
-
-  const chatJid = mamType === 'groupchat' ? mamFrom.split('/')[0] : 
-                 (mamFrom.includes(currentUser.split('@')[0]) ? mamTo.split('/')[0] : mamFrom.split('/')[0]);
   
   set((state: any) => {
     const existingMessages = state.messages[chatJid] || [];
