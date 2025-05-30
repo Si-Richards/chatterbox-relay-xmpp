@@ -39,8 +39,8 @@ marked.use({ renderer });
 
 const parseMarkdownSafely = (text: string): string => {
   try {
-    // First pass through marked for markdown parsing
-    const parsedMarkdown = marked.parse(text);
+    // Use the synchronous version of marked for simplicity
+    const parsedMarkdown = marked(text) as string;
     
     // Then sanitize with DOMPurify with strict settings
     const sanitized = DOMPurify.sanitize(parsedMarkdown, {
