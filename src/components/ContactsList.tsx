@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type, Bell, BellOff, UserX, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type, Bell, BellOff, UserX, Trash2, MoreVertical, UserCheck } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface ContactsListProps {
@@ -36,7 +35,9 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     muteContact,
     unmuteContact,
     blockContact,
-    deleteContact
+    unblockContact,
+    deleteContact,
+    blockedContacts
   } = useXMPPStore();
 
   // Function to get last message timestamp for a chat
@@ -46,10 +47,29 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     return new Date(chatMessages[chatMessages.length - 1].timestamp);
   };
 
+  // Show both regular contacts and blocked contacts (but blocked ones are filtered in getSortedContacts)
+  const getAllContacts = () => {
+    let allContacts = [...contacts];
+    
+    // Add blocked contacts that might not be in the regular contacts list
+    blockedContacts.forEach(blockedJid => {
+      if (!allContacts.find(c => c.jid === blockedJid)) {
+        allContacts.push({
+          jid: blockedJid,
+          name: blockedJid.split('@')[0],
+          presence: 'offline' as const,
+          isBlocked: true
+        });
+      }
+    });
+    
+    return allContacts;
+  };
+
   // Sort contacts based on selected method
   const getSortedContacts = () => {
-    let filtered = contacts.filter(contact =>
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) && !contact.isBlocked
+    let filtered = getAllContacts().filter(contact =>
+      contact.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     if (contactSortMethod === 'newest') {
@@ -142,6 +162,14 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     });
   };
 
+  const handleUnblockContact = (contact: any) => {
+    unblockContact(contact.jid);
+    toast({
+      title: "Contact Unblocked",
+      description: `${contact.name} has been unblocked`
+    });
+  };
+
   const handleDeleteContact = (contact: any) => {
     deleteContact(contact.jid);
     toast({
@@ -149,6 +177,44 @@ export const ContactsList: React.FC<ContactsListProps> = ({
       description: `${contact.name} has been removed from your contacts`
     });
   };
+
+  const ContactMenu = ({ contact }: { contact: any }) => (
+    <DropdownMenuContent>
+      <DropdownMenuItem onClick={() => handleMuteContact(contact)}>
+        {contact.isMuted ? <Bell className="w-4 h-4 mr-2" /> : <BellOff className="w-4 h-4 mr-2" />}
+        {contact.isMuted ? 'Unmute' : 'Mute'} Contact
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => contact.isBlocked ? handleUnblockContact(contact) : handleBlockContact(contact)}>
+        {contact.isBlocked ? <UserCheck className="w-4 h-4 mr-2" /> : <UserX className="w-4 h-4 mr-2" />}
+        {contact.isBlocked ? 'Unblock' : 'Block'} Contact
+      </DropdownMenuItem>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete Contact
+          </DropdownMenuItem>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {contact.name}? This will remove them from your contacts and unsubscribe from their presence updates.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => handleDeleteContact(contact)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Contact
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </DropdownMenuContent>
+  );
 
   const filteredContacts = getSortedContacts();
 
@@ -191,8 +257,8 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                   <Card
                     className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
                       isActive ? 'bg-blue-50 border-blue-200' : ''
-                    }`}
-                    onClick={() => handleChatClick(contact.jid, 'chat')}
+                    } ${contact.isBlocked ? 'opacity-60' : ''}`}
+                    onClick={() => !contact.isBlocked && handleChatClick(contact.jid, 'chat')}
                   >
                     <CardContent className="p-3 flex items-center space-x-2">
                       <div className="relative">
@@ -202,20 +268,40 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                             <User className="w-4 h-4" />
                           </AvatarFallback>
                         </Avatar>
-                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                        {!contact.isBlocked && (
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-1">
                           <p className="text-sm font-medium truncate">{contact.name}</p>
                           {contact.isMuted && <BellOff className="w-3 h-3 text-gray-400" />}
+                          {contact.isBlocked && <UserX className="w-3 h-3 text-red-400" />}
                         </div>
-                        <p className="text-xs text-gray-500 truncate">{getPresenceText(contact)}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {contact.isBlocked ? 'Blocked' : getPresenceText(contact)}
+                        </p>
                       </div>
-                      {unreadCount > 0 && (
-                        <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
-                          {unreadCount > 99 ? '99+' : unreadCount}
-                        </Badge>
-                      )}
+                      <div className="flex items-center space-x-1">
+                        {!contact.isBlocked && unreadCount > 0 && (
+                          <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </Badge>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-6 w-6 p-0 hover:bg-gray-200"
+                            >
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <ContactMenu contact={contact} />
+                        </DropdownMenu>
+                      </div>
                     </CardContent>
                   </Card>
                 </ContextMenuTrigger>
@@ -225,9 +311,9 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                     {contact.isMuted ? 'Unmute' : 'Mute'} Contact
                   </ContextMenuItem>
                   <ContextMenuSeparator />
-                  <ContextMenuItem onClick={() => handleBlockContact(contact)}>
-                    <UserX className="w-4 h-4 mr-2" />
-                    Block Contact
+                  <ContextMenuItem onClick={() => contact.isBlocked ? handleUnblockContact(contact) : handleBlockContact(contact)}>
+                    {contact.isBlocked ? <UserCheck className="w-4 h-4 mr-2" /> : <UserX className="w-4 h-4 mr-2" />}
+                    {contact.isBlocked ? 'Unblock' : 'Block'} Contact
                   </ContextMenuItem>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

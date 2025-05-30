@@ -1,5 +1,5 @@
 
-import { Message } from '../../types';
+import { Contact, Room, Message } from '../../types';
 
 export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   const from = stanza.attrs.from;
@@ -7,143 +7,102 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   const body = stanza.getChildText('body');
   const type = stanza.attrs.type || 'chat';
   const id = stanza.attrs.id || `msg-${Date.now()}`;
-  const currentUser = get().currentUser;
-  const { blockedContacts } = get();
 
-  // Skip if no body content
   if (!body) return;
 
+  const { currentUser, blockedContacts, showMessageNotification } = get();
+
+  // Determine the chat JID based on message type
   let chatJid: string;
-  let fromJid: string;
-
   if (type === 'groupchat') {
+    // For group chats, use the room JID (without resource)
     chatJid = from.split('/')[0];
-    fromJid = from;
-    
-    // Skip messages from current user in group chats
-    const nickname = from.split('/')[1];
-    const currentUserNickname = currentUser.split('@')[0];
-    if (nickname === currentUserNickname) {
-      console.log(`Skipping message from current user: ${nickname}`);
-      return;
-    }
   } else {
-    chatJid = from.split('/')[0];
-    fromJid = from.split('/')[0];
-    
-    // Skip messages from current user in direct chats
+    // For direct chats, use the bare JID of the other participant
     const currentUserBareJid = currentUser.split('/')[0];
-    if (chatJid === currentUserBareJid) {
-      console.log(`Skipping message from current user in direct chat: ${chatJid}`);
-      return;
-    }
-
-    // Skip messages from blocked contacts
-    if (blockedContacts.includes(chatJid)) {
-      console.log(`Skipping message from blocked contact: ${chatJid}`);
-      return;
-    }
+    const fromBareJid = from.split('/')[0];
+    const toBareJid = to.split('/')[0];
+    
+    // If we sent the message, the chat JID is the recipient
+    // If we received the message, the chat JID is the sender
+    chatJid = (fromBareJid === currentUserBareJid) ? toBareJid : fromBareJid;
   }
 
-  // Check for OMEMO encryption
-  const encrypted = stanza.getChild('encrypted', 'eu.siacs.conversations.axolotl');
-  const isEncrypted = !!encrypted;
-  
-  // Check for file attachments with better error handling
-  let fileData = null;
-  const oobUrl = stanza.getChild('x', 'jabber:x:oob');
-  if (oobUrl) {
-    const url = oobUrl.getChildText('url');
-    const desc = oobUrl.getChildText('desc') || 'File';
-    
-    console.log('Processing file attachment:', { url, desc });
-    
-    if (url) {
-      // Determine file type from URL or description
-      let fileType = 'application/octet-stream';
-      let fileName = desc;
-      
-      if (url.includes('.gif') || desc.toLowerCase().includes('gif')) {
-        fileType = 'image/gif';
-        fileName = fileName || 'animated.gif';
-        console.log('Detected GIF file:', url);
-      } else if (url.match(/\.(jpg|jpeg|png|webp)$/i)) {
-        fileType = `image/${url.split('.').pop()?.toLowerCase()}`;
-        fileName = fileName || `image.${url.split('.').pop()}`;
-      }
-      
-      fileData = {
-        name: fileName,
-        type: fileType,
-        size: 0,
-        url: url
-      };
-      
-      // Add error handling for image loading
-      if (fileType.startsWith('image/')) {
-        // Test if the image URL is accessible
-        const testImage = new Image();
-        testImage.onload = () => {
-          console.log('Image loaded successfully:', url);
-        };
-        testImage.onerror = () => {
-          console.error('Failed to load image:', url);
-          // Could update the message to show an error state
-        };
-        testImage.src = url;
-      }
-    }
+  // Check if contact/room is blocked
+  const senderBareJid = from.split('/')[0];
+  if (blockedContacts.includes(senderBareJid) || blockedContacts.includes(chatJid)) {
+    console.log(`Blocked message from ${senderBareJid} in chat ${chatJid}`);
+    return;
   }
 
   const message: Message = {
     id,
-    from: fromJid,
+    from,
     to,
-    body: isEncrypted ? 'This message was encrypted but could not be decrypted.' : body,
+    body,
     timestamp: new Date(),
-    type,
-    fileData,
-    isEncrypted,
+    type: type as 'chat' | 'groupchat',
     status: 'delivered'
   };
 
-  console.log('Adding regular message:', {
+  console.log(`Processing message for chat: ${chatJid}`, {
+    from,
+    to,
+    currentUser,
+    type,
     chatJid,
-    messageId: id,
-    hasFileData: !!fileData,
-    fileType: fileData?.type,
-    isEncrypted
+    body: body.substring(0, 50) + (body.length > 50 ? '...' : '')
   });
 
-  set((state: any) => ({
-    messages: {
-      ...state.messages,
-      [chatJid]: [...(state.messages[chatJid] || []), message]
-    }
-  }));
-
-  // Send delivery receipt for incoming messages (but not for group chats from ourselves)
-  const { client } = get();
-  if (client && id && type !== 'groupchat') {
-    const receipt = stanza.clone();
-    receipt.attrs.to = receipt.attrs.from;
-    receipt.attrs.from = receipt.attrs.to;
-    receipt.attrs.id = `receipt-${Date.now()}`;
-    receipt.children = [
-      {
-        name: 'received',
-        attrs: { xmlns: 'urn:xmpp:receipts', id: id },
-        children: []
-      }
-    ];
+  set((state: any) => {
+    const existingMessages = state.messages[chatJid] || [];
     
-    console.log('Sending delivery receipt for message:', id);
-    client.send(receipt);
-  }
+    // Check for duplicate messages
+    const isDuplicate = existingMessages.some((msg: Message) => 
+      msg.id === id || (msg.body === body && msg.from === from && 
+      Math.abs(new Date(msg.timestamp).getTime() - message.timestamp.getTime()) < 1000)
+    );
+    
+    if (isDuplicate) {
+      console.log('Duplicate message detected, skipping');
+      return state;
+    }
 
-  // Trigger notifications for incoming messages
-  const { showMessageNotification } = get();
-  if (showMessageNotification) {
-    showMessageNotification(from, body, type);
-  }
+    // Update contact/room with latest activity
+    let updatedContacts = state.contacts;
+    let updatedRooms = state.rooms;
+
+    if (type === 'chat') {
+      // Update contact info if it exists
+      updatedContacts = state.contacts.map((contact: Contact) => {
+        if (contact.jid === chatJid) {
+          return { ...contact, lastSeen: new Date() };
+        }
+        return contact;
+      });
+    } else if (type === 'groupchat') {
+      // Update room participant list if needed
+      updatedRooms = state.rooms.map((room: Room) => {
+        if (room.jid === chatJid) {
+          const nickname = from.split('/')[1];
+          if (nickname && !room.participants.includes(nickname)) {
+            return { ...room, participants: [...room.participants, nickname] };
+          }
+        }
+        return room;
+      });
+    }
+
+    return {
+      messages: {
+        ...state.messages,
+        [chatJid]: [...existingMessages, message]
+      },
+      contacts: updatedContacts,
+      rooms: updatedRooms
+    };
+  });
+
+  // Show notification for new messages
+  showMessageNotification(from, body, type);
 };
