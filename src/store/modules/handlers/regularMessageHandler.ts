@@ -2,11 +2,26 @@
 import { parseMessageStanza, createMessageObject } from './utils/messageParser';
 import { isMessageBlocked, isDuplicateMessage } from './utils/messageValidator';
 import { updateContactsAndRooms, updateMessagesState } from './utils/stateUpdater';
+import { validateMessageStanza, rateLimitCheck } from './utils/secureMessageValidator';
 
 export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   const { currentUser, blockedContacts, showMessageNotification } = get();
 
-  // Parse the message stanza
+  // Security validation first
+  const validationResult = validateMessageStanza(stanza);
+  if (!validationResult.isValid) {
+    console.error('Message validation failed:', validationResult.errors);
+    return;
+  }
+
+  // Rate limiting check
+  const senderJid = validationResult.sanitizedData!.from.split('/')[0];
+  if (!rateLimitCheck(senderJid, 'send-message')) {
+    console.warn(`Rate limit exceeded for user: ${senderJid}`);
+    return;
+  }
+
+  // Parse the message stanza with validated data
   const parsedData = parseMessageStanza(stanza, currentUser);
   if (!parsedData) return;
 

@@ -10,6 +10,7 @@ import { MessageReactions } from './MessageReactions';
 import { RoomSettings } from './RoomSettings';
 import { TypingIndicator } from './TypingIndicator';
 import { PollMessage } from './PollMessage';
+import { SecureMessageRenderer } from './SecureMessageRenderer';
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,18 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { useXMPPStore } from '@/store/xmppStore';
 import { useTyping } from '@/hooks/useTyping';
 import { toast } from '@/hooks/use-toast';
-
-// Simple markdown parser for basic formatting
-const parseMarkdown = (text: string) => {
-  // Bold: **text** or __text__
-  let parsed = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  parsed = parsed.replace(/__(.*?)__/g, '<strong>$1</strong>');
-
-  // Italic: *text* or _text_
-  parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  parsed = parsed.replace(/_(.*?)_/g, '<em>$1</em>');
-  return parsed;
-};
+import { sanitizeInput } from '@/utils/validation';
 
 // Image component with error handling
 const ImageWithFallback = ({ src, alt, className, style }: { src: string; alt: string; className?: string; style?: React.CSSProperties }) => {
@@ -163,8 +153,20 @@ export const ChatArea = () => {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !activeChat || !activeChatType) return;
+    
+    // Sanitize message before sending
+    const sanitizedMessage = sanitizeInput(messageText);
+    if (sanitizedMessage.length === 0) {
+      toast({
+        title: "Invalid Message",
+        description: "Message contains invalid characters",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     stopTyping(); // Stop typing when sending message
-    sendMessage(activeChat, messageText, activeChatType);
+    sendMessage(activeChat, sanitizedMessage, activeChatType);
     setMessageText('');
   };
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -267,12 +269,32 @@ export const ChatArea = () => {
   const handleFileUpload = async (file: File) => {
     if (!activeChat || !activeChatType) return;
 
+    // Validate file before processing
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Only image files are allowed",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      toast({
+        title: "File Too Large",
+        description: "File size must be less than 50MB",
+        variant: "destructive"
+      });
+      return;
+    }
+
     // For demo purposes, we'll convert the file to a data URL
     // In a real implementation, you'd upload to a file server
     const reader = new FileReader();
     reader.onload = e => {
       const fileData = {
-        name: file.name,
+        name: sanitizeInput(file.name),
         type: file.type,
         size: file.size,
         url: e.target?.result as string
@@ -489,7 +511,7 @@ export const ChatArea = () => {
             </div>;
         }
 
-        // Handle regular messages
+        // Handle regular messages with secure rendering
         const messageContent = <div className="flex items-start space-x-2">
               <div className={`px-4 py-2 rounded-lg ${isOwn ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200'}`}>
                 {!isOwn && activeChatType === 'groupchat' && <p className="text-xs font-medium mb-1 text-blue-600">
@@ -517,12 +539,16 @@ export const ChatArea = () => {
                           <p className="text-gray-500">{(message.fileData.size / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>}
-                    {message.body && <div className="text-sm break-words whitespace-pre-wrap" dangerouslySetInnerHTML={{
-                __html: markdownEnabled ? parseMarkdown(message.body) : message.body
-              }} />}
-                  </div> : <div className="text-sm break-words whitespace-pre-wrap" dangerouslySetInnerHTML={{
-              __html: markdownEnabled ? parseMarkdown(message.body) : message.body
-            }} />}
+                    {message.body && <SecureMessageRenderer 
+                        content={message.body}
+                        markdownEnabled={markdownEnabled}
+                        className="text-sm break-words whitespace-pre-wrap"
+                      />}
+                  </div> : <SecureMessageRenderer 
+                    content={message.body}
+                    markdownEnabled={markdownEnabled}
+                    className="text-sm break-words whitespace-pre-wrap"
+                  />}
                 
                 <div className={`text-xs mt-1 flex items-center ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
                   <span>{formatTime(message.timestamp)}</span>
