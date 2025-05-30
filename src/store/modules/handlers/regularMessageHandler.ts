@@ -8,6 +8,7 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   const type = stanza.attrs.type || 'chat';
   const id = stanza.attrs.id || `msg-${Date.now()}`;
   const currentUser = get().currentUser;
+  const { blockedContacts } = get();
 
   // Skip if no body content
   if (!body) return;
@@ -34,6 +35,12 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
     const currentUserBareJid = currentUser.split('/')[0];
     if (chatJid === currentUserBareJid) {
       console.log(`Skipping message from current user in direct chat: ${chatJid}`);
+      return;
+    }
+
+    // Skip messages from blocked contacts
+    if (blockedContacts.includes(chatJid)) {
+      console.log(`Skipping message from blocked contact: ${chatJid}`);
       return;
     }
   }
@@ -135,9 +142,8 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   }
 
   // Trigger notifications for incoming messages
-  const { triggerNotification } = get();
-  if (triggerNotification) {
-    const isDirectMessage = type === 'chat';
-    triggerNotification(chatJid, message, isDirectMessage);
+  const { showMessageNotification } = get();
+  if (showMessageNotification) {
+    showMessageNotification(from, body, type);
   }
 };

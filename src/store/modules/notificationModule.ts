@@ -13,7 +13,15 @@ export const createNotificationModule = (set: any, get: any) => ({
   },
 
   showMessageNotification: (from: string, body: string, type: 'chat' | 'groupchat') => {
-    const { notificationSettings, activeChat, contacts, rooms, currentUser } = get();
+    const { 
+      notificationSettings, 
+      activeChat, 
+      contacts, 
+      rooms, 
+      currentUser,
+      mutedContacts,
+      mutedRooms 
+    } = get();
     
     // Don't show notifications if disabled or in do not disturb mode
     if (!notificationSettings.enabled || notificationSettings.doNotDisturb) {
@@ -38,6 +46,16 @@ export const createNotificationModule = (set: any, get: any) => ({
     // Don't show notification if user is actively viewing this chat
     const chatJid = type === 'groupchat' ? from.split('/')[0] : from.split('/')[0];
     if (activeChat === chatJid && !document.hidden) {
+      return;
+    }
+
+    // Check if contact/room is muted
+    if (type === 'chat' && mutedContacts.includes(chatJid)) {
+      console.log(`Skipping notification for muted contact: ${chatJid}`);
+      return;
+    }
+    if (type === 'groupchat' && mutedRooms.includes(chatJid)) {
+      console.log(`Skipping notification for muted room: ${chatJid}`);
       return;
     }
 

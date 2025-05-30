@@ -1,3 +1,4 @@
+
 export interface MessageReaction {
   emoji: string;
   users: string[];
@@ -48,6 +49,8 @@ export interface Contact {
   presence: 'online' | 'offline' | 'away' | 'dnd' | 'xa';
   avatar?: string;
   lastSeen?: Date;
+  isMuted?: boolean;
+  isBlocked?: boolean;
 }
 
 export interface RoomAffiliation {
@@ -66,6 +69,7 @@ export interface Room {
   isPermanent?: boolean;
   affiliations?: RoomAffiliation[];
   avatar?: string;
+  isMuted?: boolean;
 }
 
 export interface TypingState {
@@ -111,6 +115,9 @@ export interface XMPPState {
   roomRefreshInterval: NodeJS.Timeout | null;
   notificationSettings: NotificationSettings;
   connectionHealth: ConnectionHealth;
+  blockedContacts: string[];
+  mutedContacts: string[];
+  mutedRooms: string[];
 
   // Connection methods
   connect: (username: string, password: string) => Promise<void>;
@@ -157,6 +164,13 @@ export interface XMPPState {
   // Presence methods
   addContact: (jid: string) => void;
 
+  // Contact management methods
+  muteContact: (jid: string) => void;
+  unmuteContact: (jid: string) => void;
+  blockContact: (jid: string) => void;
+  unblockContact: (jid: string) => void;
+  deleteContact: (jid: string) => void;
+
   // Room methods
   createRoom: (roomName: string, description?: string, isPermanent?: boolean, privacyOptions?: any) => void;
   joinRoom: (roomJid: string) => void;
@@ -165,6 +179,9 @@ export interface XMPPState {
   setRoomAvatar: (roomJid: string, avatarUrl: string) => void;
   fetchRoomAffiliations: (roomJid: string) => Promise<void>;
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: string, role: string) => void;
+  muteRoom: (jid: string) => void;
+  unmuteRoom: (jid: string) => void;
+  leaveRoom: (jid: string) => void;
 
   // Typing methods
   sendChatState: (to: string, state: 'composing' | 'active' | 'paused' | 'inactive' | 'gone', type: 'chat' | 'groupchat') => void;

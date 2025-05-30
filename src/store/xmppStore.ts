@@ -14,6 +14,8 @@ import { createConnectionHealthModule } from './modules/connectionHealthModule';
 import { createRoomRefreshModule } from './modules/roomRefreshModule';
 import { createOMEMOModule } from './modules/omemoModule';
 import { createServerUsersModule } from './modules/serverUsersModule';
+import { createContactManagementModule } from './modules/contactManagementModule';
+import { createRoomManagementModule } from './modules/roomManagementModule';
 
 export * from './types';
 
@@ -35,6 +37,9 @@ export const useXMPPStore = create<XMPPState>()(
       typingStates: {},
       currentUserTyping: {},
       roomRefreshInterval: null,
+      blockedContacts: [],
+      mutedContacts: [],
+      mutedRooms: [],
       notificationSettings: {
         enabled: false,
         soundEnabled: true,
@@ -64,6 +69,8 @@ export const useXMPPStore = create<XMPPState>()(
       ...createNotificationModule(set, get),
       ...createOMEMOModule(set, get),
       ...createServerUsersModule(set, get),
+      ...createContactManagementModule(set, get),
+      ...createRoomManagementModule(set, get),
 
       // Add method to mark messages as read
       markMessagesAsRead: (chatJid: string) => {
@@ -123,6 +130,9 @@ export const useXMPPStore = create<XMPPState>()(
         contactSortMethod: state.contactSortMethod,
         roomSortMethod: state.roomSortMethod,
         notificationSettings: state.notificationSettings,
+        blockedContacts: state.blockedContacts,
+        mutedContacts: state.mutedContacts,
+        mutedRooms: state.mutedRooms,
         // Persist message read status
         messageReadStatus: Object.keys(state.messages).reduce((acc, chatJid) => {
           acc[chatJid] = (state.messages[chatJid] || []).reduce((msgAcc: any, msg: Message) => {

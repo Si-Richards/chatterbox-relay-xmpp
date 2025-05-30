@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -6,7 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type } from 'lucide-react';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from '@/components/ui/context-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type, Bell, BellOff, UserX, Trash2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface ContactsListProps {
   searchQuery: string;
@@ -28,7 +32,11 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     currentUser,
     contactSortMethod,
     setContactSortMethod,
-    markMessagesAsRead
+    markMessagesAsRead,
+    muteContact,
+    unmuteContact,
+    blockContact,
+    deleteContact
   } = useXMPPStore();
 
   // Function to get last message timestamp for a chat
@@ -41,7 +49,7 @@ export const ContactsList: React.FC<ContactsListProps> = ({
   // Sort contacts based on selected method
   const getSortedContacts = () => {
     let filtered = contacts.filter(contact =>
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase())
+      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) && !contact.isBlocked
     );
 
     if (contactSortMethod === 'newest') {
@@ -110,6 +118,38 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     }, 100);
   };
 
+  const handleMuteContact = (contact: any) => {
+    if (contact.isMuted) {
+      unmuteContact(contact.jid);
+      toast({
+        title: "Contact Unmuted",
+        description: `${contact.name} has been unmuted`
+      });
+    } else {
+      muteContact(contact.jid);
+      toast({
+        title: "Contact Muted",
+        description: `${contact.name} has been muted`
+      });
+    }
+  };
+
+  const handleBlockContact = (contact: any) => {
+    blockContact(contact.jid);
+    toast({
+      title: "Contact Blocked",
+      description: `${contact.name} has been blocked`
+    });
+  };
+
+  const handleDeleteContact = (contact: any) => {
+    deleteContact(contact.jid);
+    toast({
+      title: "Contact Deleted",
+      description: `${contact.name} has been removed from your contacts`
+    });
+  };
+
   const filteredContacts = getSortedContacts();
 
   return (
@@ -146,34 +186,76 @@ export const ContactsList: React.FC<ContactsListProps> = ({
             const isActive = activeChat === contact.jid;
             
             return (
-              <Card
-                key={contact.jid}
-                className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
-                  isActive ? 'bg-blue-50 border-blue-200' : ''
-                }`}
-                onClick={() => handleChatClick(contact.jid, 'chat')}
-              >
-                <CardContent className="p-3 flex items-center space-x-2">
-                  <div className="relative">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={contact.avatar} alt={contact.name} />
-                      <AvatarFallback className="bg-gray-100 text-gray-600">
-                        <User className="w-4 h-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{contact.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{getPresenceText(contact)}</p>
-                  </div>
-                  {unreadCount > 0 && (
-                    <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Badge>
-                  )}
-                </CardContent>
-              </Card>
+              <ContextMenu key={contact.jid}>
+                <ContextMenuTrigger>
+                  <Card
+                    className={`bg-transparent shadow-none hover:bg-gray-100 transition-colors rounded-md cursor-pointer ${
+                      isActive ? 'bg-blue-50 border-blue-200' : ''
+                    }`}
+                    onClick={() => handleChatClick(contact.jid, 'chat')}
+                  >
+                    <CardContent className="p-3 flex items-center space-x-2">
+                      <div className="relative">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={contact.avatar} alt={contact.name} />
+                          <AvatarFallback className="bg-gray-100 text-gray-600">
+                            <User className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${getPresenceColor(contact.presence)}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-1">
+                          <p className="text-sm font-medium truncate">{contact.name}</p>
+                          {contact.isMuted && <BellOff className="w-3 h-3 text-gray-400" />}
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">{getPresenceText(contact)}</p>
+                      </div>
+                      {unreadCount > 0 && (
+                        <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </Badge>
+                      )}
+                    </CardContent>
+                  </Card>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={() => handleMuteContact(contact)}>
+                    {contact.isMuted ? <Bell className="w-4 h-4 mr-2" /> : <BellOff className="w-4 h-4 mr-2" />}
+                    {contact.isMuted ? 'Unmute' : 'Mute'} Contact
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={() => handleBlockContact(contact)}>
+                    <UserX className="w-4 h-4 mr-2" />
+                    Block Contact
+                  </ContextMenuItem>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <ContextMenuItem onSelect={(e) => e.preventDefault()}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Contact
+                      </ContextMenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete {contact.name}? This will remove them from your contacts and unsubscribe from their presence updates.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={() => handleDeleteContact(contact)}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          Delete Contact
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>
