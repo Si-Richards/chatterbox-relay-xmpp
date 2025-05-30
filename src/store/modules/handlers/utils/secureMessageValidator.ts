@@ -1,5 +1,5 @@
 
-import { validateJID, sanitizeInput } from '../../../utils/validation';
+import { validateJID, sanitizeInput } from '../../../../utils/validation';
 
 export interface ValidationResult {
   isValid: boolean;

@@ -12,15 +12,15 @@ interface SecureMessageRendererProps {
 // Configure marked for security
 marked.setOptions({
   breaks: true,
-  gfm: true,
-  sanitize: false // We'll use DOMPurify instead for better control
+  gfm: true
 });
 
 // Custom renderer to limit allowed HTML elements
 const renderer = new marked.Renderer();
 
 // Override link rendering to add security attributes
-renderer.link = (href, title, text) => {
+renderer.link = ({ href, title, tokens }) => {
+  const text = tokens[0]?.raw || '';
   const cleanHref = DOMPurify.sanitize(href || '', { ALLOWED_TAGS: [] });
   const cleanTitle = title ? DOMPurify.sanitize(title, { ALLOWED_TAGS: [] }) : '';
   const cleanText = DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
@@ -28,7 +28,7 @@ renderer.link = (href, title, text) => {
 };
 
 // Override image rendering for security
-renderer.image = (href, title, text) => {
+renderer.image = ({ href, title, text }) => {
   const cleanHref = DOMPurify.sanitize(href || '', { ALLOWED_TAGS: [] });
   const cleanTitle = title ? DOMPurify.sanitize(title, { ALLOWED_TAGS: [] }) : '';
   const cleanText = DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
@@ -40,16 +40,13 @@ marked.use({ renderer });
 const parseMarkdownSafely = (text: string): string => {
   try {
     // First pass through marked for markdown parsing
-    const parsedMarkdown = marked(text);
+    const parsedMarkdown = marked.parse(text);
     
     // Then sanitize with DOMPurify with strict settings
     const sanitized = DOMPurify.sanitize(parsedMarkdown, {
       ALLOWED_TAGS: ['strong', 'em', 'b', 'i', 'u', 'a', 'br', 'p', 'code', 'pre'],
       ALLOWED_ATTR: ['href', 'target', 'rel', 'title'],
-      ALLOW_DATA_ATTR: false,
-      FORBID_SCRIPT: true,
-      FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input', 'button'],
-      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur']
+      ALLOW_DATA_ATTR: false
     });
     
     return sanitized;
@@ -80,8 +77,7 @@ const parseBasicFormattingSafely = (text: string): string => {
   // Sanitize the result
   return DOMPurify.sanitize(formatted, {
     ALLOWED_TAGS: ['strong', 'em', 'b', 'i'],
-    ALLOWED_ATTR: [],
-    FORBID_SCRIPT: true
+    ALLOWED_ATTR: []
   });
 };
 
