@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     hmr: {
       port: 8080,
-      clientPort: mode === 'development' ? 8080 : undefined
+      clientPort: mode === 'development' ? 8080 : undefined,
+      host: mode === 'development' ? 'localhost' : undefined
     }
   },
   plugins: [
