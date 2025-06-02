@@ -19,19 +19,19 @@ marked.setOptions({
 const renderer = new marked.Renderer();
 
 // Override link rendering to add security attributes
-renderer.link = ({ href, title, tokens }) => {
-  const text = tokens[0]?.raw || '';
-  const cleanHref = DOMPurify.sanitize(href || '', { ALLOWED_TAGS: [] });
-  const cleanTitle = title ? DOMPurify.sanitize(title, { ALLOWED_TAGS: [] }) : '';
+renderer.link = (token: any) => {
+  const text = token.text || '';
+  const cleanHref = DOMPurify.sanitize(token.href || '', { ALLOWED_TAGS: [] });
+  const cleanTitle = token.title ? DOMPurify.sanitize(token.title, { ALLOWED_TAGS: [] }) : '';
   const cleanText = DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
   return `<a href="${cleanHref}" title="${cleanTitle}" target="_blank" rel="noopener noreferrer">${cleanText}</a>`;
 };
 
 // Override image rendering for security
-renderer.image = ({ href, title, text }) => {
-  const cleanHref = DOMPurify.sanitize(href || '', { ALLOWED_TAGS: [] });
-  const cleanTitle = title ? DOMPurify.sanitize(title, { ALLOWED_TAGS: [] }) : '';
-  const cleanText = DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
+renderer.image = (token: any) => {
+  const cleanHref = DOMPurify.sanitize(token.href || '', { ALLOWED_TAGS: [] });
+  const cleanTitle = token.title ? DOMPurify.sanitize(token.title, { ALLOWED_TAGS: [] }) : '';
+  const cleanText = DOMPurify.sanitize(token.text, { ALLOWED_TAGS: [] });
   return `<img src="${cleanHref}" alt="${cleanText}" title="${cleanTitle}" style="max-width: 100%; height: auto;" />`;
 };
 
