@@ -139,6 +139,19 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
                  show === 'xa' ? 'xa' : 'online';
     }
 
+    // Handle vCard update notifications in presence
+    const vCardUpdate = stanza.getChild('x', 'vcard-temp:x:update');
+    if (vCardUpdate) {
+      const photo = vCardUpdate.getChildText('photo');
+      if (photo === 'updated' || photo === '') {
+        // Fetch the updated vCard using vCard4
+        const { fetchContactAvatar } = get();
+        setTimeout(() => {
+          fetchContactAvatar(contactJid);
+        }, 500); // Small delay to ensure vCard is updated
+      }
+    }
+
     set((state: any) => ({
       contacts: state.contacts.map((contact: Contact) =>
         contact.jid === contactJid

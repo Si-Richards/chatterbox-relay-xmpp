@@ -4,6 +4,26 @@ import { Contact, Room, RoomAffiliation } from '../../types';
 export const handleIqStanza = (stanza: any, set: any, get: any) => {
   const type = stanza.attrs.type;
   const id = stanza.attrs.id;
+  const from = stanza.attrs.from;
+  
+  // Handle vCard4 responses (mod_vcard2)
+  if (stanza.getChild('vcard', 'urn:ietf:params:xml:ns:vcard-4.0') && type === 'result') {
+    const vcard = stanza.getChild('vcard', 'urn:ietf:params:xml:ns:vcard-4.0');
+    const photo = vcard.getChild('photo');
+    
+    if (photo && from) {
+      const uri = photo.getChildText('uri');
+      if (uri) {
+        // Update contact avatar
+        set((state: any) => ({
+          contacts: state.contacts.map((contact: Contact) =>
+            contact.jid === from ? { ...contact, avatar: uri } : contact
+          )
+        }));
+        console.log(`Updated avatar for ${from}:`, uri);
+      }
+    }
+  }
   
   // Handle roster (contact list)
   if (stanza.getChild('query', 'jabber:iq:roster') && type === 'result') {
@@ -17,6 +37,14 @@ export const handleIqStanza = (stanza: any, set: any, get: any) => {
     }));
     
     set({ contacts });
+    
+    // Fetch avatars for all contacts using vCard4
+    const { fetchContactAvatar } = get();
+    contacts.forEach(contact => {
+      setTimeout(() => {
+        fetchContactAvatar(contact.jid);
+      }, Math.random() * 2000); // Stagger requests
+    });
   }
   
   // Handle room discovery - only include actual conference rooms
