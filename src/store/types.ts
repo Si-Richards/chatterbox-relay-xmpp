@@ -97,6 +97,14 @@ export interface ConnectionHealth {
   intentionalDisconnect: boolean;
 }
 
+export interface RefreshState {
+  isRefreshing: boolean;
+  contactsLoaded: boolean;
+  messagesLoaded: boolean;
+  roomsLoaded: boolean;
+  lastRefresh: Date | null;
+}
+
 export interface XMPPState {
   client: any;
   isConnected: boolean;
@@ -115,6 +123,7 @@ export interface XMPPState {
   roomRefreshInterval: NodeJS.Timeout | null;
   notificationSettings: NotificationSettings;
   connectionHealth: ConnectionHealth;
+  refreshState: RefreshState;
   blockedContacts: string[];
   mutedContacts: string[];
   mutedRooms: string[];
@@ -136,8 +145,16 @@ export interface XMPPState {
   attemptReconnect: () => void;
   manualReconnect: () => void;
 
-  // Room refresh methods
+  // Data refresh methods
+  refreshAllData: () => Promise<void>;
+  refreshContacts: () => Promise<void>;
+  refreshMessages: () => Promise<void>;
   refreshRooms: () => Promise<void>;
+  setRefreshState: (updates: Partial<RefreshState>) => void;
+  sendPresenceProbes: () => void;
+  retryOperation: <T>(operation: () => Promise<T>, maxRetries?: number, delay?: number) => Promise<T>;
+
+  // Room refresh methods
   removeDeletedRoomFromList: (roomJid: string) => void;
   syncRoomList: (serverRooms: any[]) => void;
   startPeriodicRoomRefresh: () => void;
