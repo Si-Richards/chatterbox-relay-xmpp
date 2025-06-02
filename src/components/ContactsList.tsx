@@ -178,6 +178,8 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     });
   };
 
+  const filteredContacts = getSortedContacts();
+
   const ContactMenu = ({ contact }: { contact: any }) => (
     <DropdownMenuContent>
       <DropdownMenuItem onClick={() => handleMuteContact(contact)}>
@@ -215,8 +217,6 @@ export const ContactsList: React.FC<ContactsListProps> = ({
       </AlertDialog>
     </DropdownMenuContent>
   );
-
-  const filteredContacts = getSortedContacts();
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
@@ -282,7 +282,7 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                           {contact.isBlocked ? 'Blocked' : getPresenceText(contact)}
                         </p>
                       </div>
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1 flex-shrink-0">
                         {!contact.isBlocked && unreadCount > 0 && (
                           <Badge variant="destructive" className="h-5 min-w-5 text-xs px-1.5 flex-shrink-0">
                             {unreadCount > 99 ? '99+' : unreadCount}
