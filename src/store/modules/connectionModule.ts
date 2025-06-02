@@ -28,6 +28,13 @@ export const createConnectionModule = (set: any, get: any) => ({
         reconnectTimeout: null,
         intentionalDisconnect: false,
         currentPingId: null,
+      },
+      refreshState: {
+        isRefreshing: false,
+        contactsLoaded: false,
+        messagesLoaded: false,
+        roomsLoaded: false,
+        lastRefresh: null,
       }
     });
 
@@ -68,39 +75,18 @@ export const createConnectionModule = (set: any, get: any) => ({
         // Send initial presence
         xmppClient.send(xml('presence'));
         
-        // Request MAM archive to retrieve all messages
-        const mamQuery = xml(
-          'iq',
-          { type: 'set', id: 'mam1' },
-          xml('query', { xmlns: 'urn:xmpp:mam:2' })
-        );
-        xmppClient.send(mamQuery);
-        
-        // Fetch roster (contact list) fresh from server
-        const rosterIq = xml(
-          'iq',
-          { type: 'get', id: 'roster-1' },
-          xml('query', { xmlns: 'jabber:iq:roster' })
-        );
-        xmppClient.send(rosterIq);
-        
-        // Discover MUC rooms on the conference server fresh from server
-        const discoIq = xml(
-          'iq',
-          { type: 'get', to: 'conference.ejabberd.voicehost.io', id: 'disco-rooms' },
-          xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
-        );
-        xmppClient.send(discoIq);
-
-        // Auto-accept presence subscriptions and send presence probes to roster contacts
+        // Start comprehensive data refresh after initial connection
         setTimeout(() => {
-          const { contacts } = get();
-          contacts.forEach((contact: any) => {
-            // Send presence probe to get current status
-            const presenceProbe = xml('presence', { to: contact.jid, type: 'probe' });
-            xmppClient.send(presenceProbe);
+          const { refreshAllData } = get();
+          refreshAllData().catch(error => {
+            console.error('Initial data refresh failed:', error);
           });
-        }, 1000);
+        }, 1000); // Give connection time to stabilize
+
+        // Auto-accept presence subscriptions
+        setTimeout(() => {
+          console.log('Connection fully established, ready for subscriptions');
+        }, 2000);
       });
 
       xmppClient.on('stanza', (stanza: any) => {
@@ -166,7 +152,14 @@ export const createConnectionModule = (set: any, get: any) => ({
       activeChat: null,
       activeChatType: null,
       typingStates: {},
-      currentUserTyping: {}
+      currentUserTyping: {},
+      refreshState: {
+        isRefreshing: false,
+        contactsLoaded: false,
+        messagesLoaded: false,
+        roomsLoaded: false,
+        lastRefresh: null,
+      }
     });
   },
 });

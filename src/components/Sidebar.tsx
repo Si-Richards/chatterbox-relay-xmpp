@@ -1,9 +1,12 @@
+
 import React, { useState } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast';
 import { UserBrowser } from './UserBrowser';
 import { CreateRoomDialog } from './CreateRoomDialog';
@@ -15,7 +18,13 @@ import { RoomsList } from './RoomsList';
 import { ConnectionStatus } from './ConnectionStatus';
 
 export const Sidebar = () => {
-  const { addContact, joinRoom, setActiveChat } = useXMPPStore();
+  const { 
+    addContact, 
+    joinRoom, 
+    setActiveChat, 
+    refreshAllData, 
+    refreshState 
+  } = useXMPPStore();
   
   const [newContactJid, setNewContactJid] = useState('');
   const [roomJidToJoin, setRoomJidToJoin] = useState('');
@@ -65,18 +74,37 @@ export const Sidebar = () => {
     });
   };
 
+  const handleManualRefresh = () => {
+    refreshAllData().catch(error => {
+      console.error('Manual refresh failed:', error);
+    });
+  };
+
   return (
     <div className="w-80 flex-shrink-0 border-r bg-gray-50 border-gray-200 flex flex-col">
       <ConnectionStatus />
       
       <UserInfoSection />
 
-      <ActionButtonsRow
-        onAddContact={() => setIsAddContactOpen(true)}
-        onBrowseUsers={() => setIsUserBrowserOpen(true)}
-        onCreateRoom={() => setIsCreateRoomOpen(true)}
-        onJoinRoom={() => setIsJoinRoomOpen(true)}
-      />
+      <div className="flex items-center justify-between px-2 pb-2">
+        <div className="flex-1">
+          <ActionButtonsRow
+            onAddContact={() => setIsAddContactOpen(true)}
+            onBrowseUsers={() => setIsUserBrowserOpen(true)}
+            onCreateRoom={() => setIsCreateRoomOpen(true)}
+            onJoinRoom={() => setIsJoinRoomOpen(true)}
+          />
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={refreshState.isRefreshing}
+          className="ml-2 h-8 w-8 p-0"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshState.isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
 
       <SearchBar
         searchQuery={searchQuery}
@@ -100,6 +128,21 @@ export const Sidebar = () => {
           />
         </div>
       </ScrollArea>
+
+      {/* Loading indicator */}
+      {refreshState.isRefreshing && (
+        <div className="px-2 py-1 text-xs text-gray-500 border-t bg-blue-50">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="h-3 w-3 animate-spin" />
+            <span>
+              Loading{!refreshState.contactsLoaded ? ' contacts' : ''}
+              {refreshState.contactsLoaded && !refreshState.messagesLoaded ? ' messages' : ''}
+              {refreshState.contactsLoaded && refreshState.messagesLoaded && !refreshState.roomsLoaded ? ' rooms' : ''}
+              ...
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Add Contact Dialog */}
       <AlertDialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>

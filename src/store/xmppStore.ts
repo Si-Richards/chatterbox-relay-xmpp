@@ -16,6 +16,7 @@ import { createOMEMOModule } from './modules/omemoModule';
 import { createServerUsersModule } from './modules/serverUsersModule';
 import { createContactManagementModule } from './modules/contactManagementModule';
 import { createRoomManagementModule } from './modules/roomManagementModule';
+import { createDataRefreshModule } from './modules/dataRefreshModule';
 
 export * from './types';
 
@@ -56,10 +57,18 @@ export const useXMPPStore = create<XMPPState>()(
         reconnectTimeout: null,
         intentionalDisconnect: false,
       },
+      refreshState: {
+        isRefreshing: false,
+        contactsLoaded: false,
+        messagesLoaded: false,
+        roomsLoaded: false,
+        lastRefresh: null,
+      },
       
       ...createConnectionModule(set, get),
       ...createConnectionHealthModule(set, get),
       ...createRoomRefreshModule(set, get),
+      ...createDataRefreshModule(set, get),
       ...createMessageModule(set, get),
       ...createPresenceModule(set, get),
       ...createRoomModule(set, get),
@@ -159,6 +168,13 @@ export const useXMPPStore = create<XMPPState>()(
           state.isConnected = false;
           state.currentUser = '';
           state.client = null;
+          state.refreshState = {
+            isRefreshing: false,
+            contactsLoaded: false,
+            messagesLoaded: false,
+            roomsLoaded: false,
+            lastRefresh: null,
+          };
           
           // Store read status for later restoration
           (state as any).pendingReadStatus = messageReadStatus;
