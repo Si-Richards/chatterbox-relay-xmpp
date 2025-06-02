@@ -1,24 +1,9 @@
 
 import { xml } from '@xmpp/client';
 import { toast } from '@/hooks/use-toast';
-
-export interface RefreshState {
-  isRefreshing: boolean;
-  contactsLoaded: boolean;
-  messagesLoaded: boolean;
-  roomsLoaded: boolean;
-  lastRefresh: Date | null;
-}
+import { RefreshState } from '../types';
 
 export const createDataRefreshModule = (set: any, get: any) => ({
-  refreshState: {
-    isRefreshing: false,
-    contactsLoaded: false,
-    messagesLoaded: false,
-    roomsLoaded: false,
-    lastRefresh: null,
-  } as RefreshState,
-
   setRefreshState: (updates: Partial<RefreshState>) => {
     set((state: any) => ({
       refreshState: { ...state.refreshState, ...updates }
