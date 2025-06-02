@@ -473,118 +473,158 @@ export const ChatArea = () => {
       {/* Messages Area - Fixed height with scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {currentMessages.map(message => {
-        const isOwn = isFromCurrentUser(message.from);
-        const senderName = activeChatType === 'groupchat' ? message.from.split('/')[1] || message.from.split('@')[0] : message.from.split('@')[0];
-        
-        // Handle poll messages
-        if (message.pollData) {
-          return <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-              {!isOwn && <div className="mr-2 flex-shrink-0">
+          const isOwn = isFromCurrentUser(message.from);
+          const senderName = activeChatType === 'groupchat' ? message.from.split('/')[1] || message.from.split('@')[0] : message.from.split('@')[0];
+          
+          // Handle poll messages
+          if (message.pollData) {
+            console.log('Rendering poll message:', message.id, message.pollData);
+            return (
+              <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                {!isOwn && (
+                  <div className="mr-2 flex-shrink-0">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
+                      <AvatarFallback>
+                        <User className="h-4 w-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                )}
+                <div className={`max-w-xs lg:max-w-md`}>
+                  <PollMessage
+                    pollData={message.pollData}
+                    currentUser={currentUser}
+                    onVote={(optionIds) => handlePollVote(message.id, message.pollData!.id, optionIds)}
+                    onClosePoll={() => handleClosePoll(message.id, message.pollData!.id)}
+                    isOwner={isOwn}
+                  />
+                  <div className={`text-xs mt-1 ${isOwn ? 'text-right text-blue-600' : 'text-gray-500'}`}>
+                    {formatTime(message.timestamp)}
+                    {isOwn && getMessageStatusIcon(message.status)}
+                  </div>
+                </div>
+                {isOwn && (
+                  <div className="ml-2 flex-shrink-0">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={userAvatar || undefined} />
+                      <AvatarFallback>
+                        <User className="h-4 w-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Handle regular messages with consistent layout
+          return (
+            <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+              {!isOwn && (
+                <div className="mr-2 flex-shrink-0">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
                     <AvatarFallback>
                       <User className="h-4 w-4" />
                     </AvatarFallback>
                   </Avatar>
-                </div>}
-              <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
-                <PollMessage
-                  pollData={message.pollData}
-                  currentUser={currentUser}
-                  onVote={(optionIds) => handlePollVote(message.id, message.pollData!.id, optionIds)}
-                  onClosePoll={() => handleClosePoll(message.id, message.pollData!.id)}
-                  isOwner={isOwn}
-                />
-                <div className={`text-xs mt-1 ${isOwn ? 'text-right text-blue-600' : 'text-gray-500'}`}>
-                  {formatTime(message.timestamp)}
-                  {isOwn && getMessageStatusIcon(message.status)}
                 </div>
-              </div>
-              {isOwn && <div className="ml-2 flex-shrink-0">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={userAvatar || undefined} />
-                    <AvatarFallback>
-                      <User className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                </div>}
-            </div>;
-        }
-
-        // Handle regular messages with secure rendering
-        const messageContent = <div className="flex items-start space-x-2">
-              <div className={`px-4 py-2 rounded-lg ${isOwn ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200'}`}>
-                {!isOwn && activeChatType === 'groupchat' && <p className="text-xs font-medium mb-1 text-blue-600">
-                    {senderName}
-                  </p>}
-                
-                {/* Encryption indicator */}
-                {message.isEncrypted && <div className={`flex items-center space-x-1 mb-1 text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
-                    <Lock className="h-3 w-3" />
-                    <span>OMEMO Encrypted</span>
-                  </div>}
-                
-                {message.fileData ? <div className="space-y-2">
-                    {message.fileData.type.startsWith('image/') ? <ImageWithFallback 
-                        src={message.fileData.url} 
-                        alt={message.fileData.name} 
-                        className="max-w-xs rounded" 
-                        style={{
-                          maxHeight: '300px',
-                          objectFit: 'contain'
-                        }} 
-                      /> : <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
-                        <div className="text-sm">
-                          <p className="font-medium">{message.fileData.name}</p>
-                          <p className="text-gray-500">{(message.fileData.size / 1024).toFixed(1)} KB</p>
-                        </div>
-                      </div>}
-                    {message.body && <SecureMessageRenderer 
+              )}
+              <div className="max-w-xs lg:max-w-md">
+                <div className="flex items-start space-x-2">
+                  <div className={`px-4 py-2 rounded-lg ${isOwn ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200'}`}>
+                    {!isOwn && activeChatType === 'groupchat' && (
+                      <p className="text-xs font-medium mb-1 text-blue-600">
+                        {senderName}
+                      </p>
+                    )}
+                    
+                    {/* Encryption indicator */}
+                    {message.isEncrypted && (
+                      <div className={`flex items-center space-x-1 mb-1 text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                        <Lock className="h-3 w-3" />
+                        <span>OMEMO Encrypted</span>
+                      </div>
+                    )}
+                    
+                    {message.fileData ? (
+                      <div className="space-y-2">
+                        {message.fileData.type.startsWith('image/') ? (
+                          <ImageWithFallback 
+                            src={message.fileData.url} 
+                            alt={message.fileData.name} 
+                            className="max-w-xs rounded" 
+                            style={{
+                              maxHeight: '300px',
+                              objectFit: 'contain'
+                            }} 
+                          />
+                        ) : (
+                          <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
+                            <div className="text-sm">
+                              <p className="font-medium">{message.fileData.name}</p>
+                              <p className="text-gray-500">{(message.fileData.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                          </div>
+                        )}
+                        {message.body && (
+                          <SecureMessageRenderer 
+                            content={message.body}
+                            markdownEnabled={markdownEnabled}
+                            className="text-sm break-words whitespace-pre-wrap"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <SecureMessageRenderer 
                         content={message.body}
                         markdownEnabled={markdownEnabled}
                         className="text-sm break-words whitespace-pre-wrap"
-                      />}
-                  </div> : <SecureMessageRenderer 
-                    content={message.body}
-                    markdownEnabled={markdownEnabled}
-                    className="text-sm break-words whitespace-pre-wrap"
-                  />}
-                
-                <div className={`text-xs mt-1 flex items-center ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
-                  <span>{formatTime(message.timestamp)}</span>
-                  {isOwn && getMessageStatusIcon(message.status)}
+                      />
+                    )}
+                    
+                    <div className={`text-xs mt-1 flex items-center ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                      <span>{formatTime(message.timestamp)}</span>
+                      {isOwn && getMessageStatusIcon(message.status)}
+                    </div>
+                  </div>
+                  
+                  {/* Only show delete button for own messages */}
+                  {isOwn && (
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-red-100" onClick={() => handleDeleteMessage(message.id)}>
+                      <X className="h-3 w-3 text-red-500" />
+                    </Button>
+                  )}
                 </div>
+                {message.reactions && message.reactions.length > 0 && (
+                  <MessageReactions 
+                    reactions={message.reactions} 
+                    onReact={emoji => handleMessageReaction(message.id, emoji)} 
+                    currentUser={currentUser} 
+                  />
+                )}
+                {(!message.reactions || message.reactions.length === 0) && (
+                  <MessageReactions 
+                    reactions={[]} 
+                    onReact={emoji => handleMessageReaction(message.id, emoji)} 
+                    currentUser={currentUser} 
+                  />
+                )}
               </div>
-              
-              {/* Only show delete button for own messages */}
-              {isOwn && <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-red-100" onClick={() => handleDeleteMessage(message.id)}>
-                  <X className="h-3 w-3 text-red-500" />
-                </Button>}
-            </div>;
-        return <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-              {!isOwn && <div className="mr-2 flex-shrink-0">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={getContactAvatar(message.from.split('/')[0])} />
-                    <AvatarFallback>
-                      <User className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                </div>}
-              <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-1' : 'order-2'}`}>
-                {messageContent}
-                {message.reactions && message.reactions.length > 0 && <MessageReactions reactions={message.reactions} onReact={emoji => handleMessageReaction(message.id, emoji)} currentUser={currentUser} />}
-                {!message.reactions || message.reactions.length === 0 ? <MessageReactions reactions={[]} onReact={emoji => handleMessageReaction(message.id, emoji)} currentUser={currentUser} /> : null}
-              </div>
-              {isOwn && <div className="ml-2 flex-shrink-0">
+              {isOwn && (
+                <div className="ml-2 flex-shrink-0">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={userAvatar || undefined} />
                     <AvatarFallback>
                       <User className="h-4 w-4" />
                     </AvatarFallback>
                   </Avatar>
-                </div>}
-            </div>;
-      })}
+                </div>
+              )}
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
