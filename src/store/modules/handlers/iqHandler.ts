@@ -6,6 +6,28 @@ export const handleIqStanza = (stanza: any, set: any, get: any) => {
   const id = stanza.attrs.id;
   const from = stanza.attrs.from;
   
+  // Handle roster removal responses
+  if (id && id.startsWith('roster-remove-')) {
+    if (type === 'result') {
+      console.log(`✅ Server confirmed roster removal for ID: ${id}`);
+    } else if (type === 'error') {
+      const errorElement = stanza.getChild('error');
+      const errorType = errorElement ? errorElement.attrs.type : 'unknown';
+      const errorCondition = errorElement ? (errorElement.children[0]?.name || 'unknown-error') : 'unknown-error';
+      console.error(`❌ Server rejected roster removal for ID: ${id}, type: ${errorType}, condition: ${errorCondition}`);
+    }
+  }
+
+  // Handle block/unblock responses
+  if (id && (id.startsWith('block-') || id.startsWith('unblock-'))) {
+    if (type === 'result') {
+      console.log(`✅ Server confirmed ${id.startsWith('block-') ? 'block' : 'unblock'} operation for ID: ${id}`);
+    } else if (type === 'error') {
+      const errorElement = stanza.getChild('error');
+      console.error(`❌ Server rejected ${id.startsWith('block-') ? 'block' : 'unblock'} operation for ID: ${id}`, errorElement);
+    }
+  }
+  
   // Handle vCard4 responses (mod_vcard2)
   if (stanza.getChild('vcard', 'urn:ietf:params:xml:ns:vcard-4.0') && type === 'result') {
     const vcard = stanza.getChild('vcard', 'urn:ietf:params:xml:ns:vcard-4.0');
@@ -36,6 +58,7 @@ export const handleIqStanza = (stanza: any, set: any, get: any) => {
       presence: 'offline' as Contact['presence']
     }));
     
+    console.log(`Received roster with ${contacts.length} contacts`);
     set({ contacts });
     
     // Fetch avatars for all contacts using vCard4

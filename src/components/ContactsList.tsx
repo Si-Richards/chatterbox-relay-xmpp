@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type, Bell, BellOff, UserX, Trash2, MoreVertical, UserCheck } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, ArrowUpDown, Clock, Type, Bell, BellOff, UserX, Trash2, MoreVertical, UserCheck, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface ContactsListProps {
@@ -37,8 +37,11 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     blockContact,
     unblockContact,
     deleteContact,
-    blockedContacts
+    blockedContacts,
+    isConnected
   } = useXMPPStore();
+
+  const [deletingContacts, setDeletingContacts] = useState<Set<string>>(new Set());
 
   // Function to get last message timestamp for a chat
   const getLastMessageTime = (chatJid: string) => {
@@ -170,53 +173,101 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     });
   };
 
-  const handleDeleteContact = (contact: any) => {
-    deleteContact(contact.jid);
-    toast({
-      title: "Contact Deleted",
-      description: `${contact.name} has been removed from your contacts`
-    });
+  const handleDeleteContact = async (contact: any) => {
+    console.log(`User initiated deletion of contact: ${contact.name} (${contact.jid})`);
+    
+    if (!isConnected) {
+      toast({
+        title: "Connection Error",
+        description: "Not connected to XMPP server. Please reconnect and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Add to deleting state
+    setDeletingContacts(prev => new Set([...prev, contact.jid]));
+
+    try {
+      await deleteContact(contact.jid);
+      
+      toast({
+        title: "Contact Deleted",
+        description: `${contact.name} has been successfully removed from your contacts`
+      });
+    } catch (error) {
+      console.error(`Failed to delete contact ${contact.jid}:`, error);
+      
+      toast({
+        title: "Deletion Failed",
+        description: error instanceof Error ? error.message : "Failed to delete contact. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      // Remove from deleting state
+      setDeletingContacts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(contact.jid);
+        return newSet;
+      });
+    }
   };
 
   const filteredContacts = getSortedContacts();
 
-  const ContactMenu = ({ contact }: { contact: any }) => (
-    <DropdownMenuContent>
-      <DropdownMenuItem onClick={() => handleMuteContact(contact)}>
-        {contact.isMuted ? <Bell className="w-4 h-4 mr-2" /> : <BellOff className="w-4 h-4 mr-2" />}
-        {contact.isMuted ? 'Unmute' : 'Mute'} Contact
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => contact.isBlocked ? handleUnblockContact(contact) : handleBlockContact(contact)}>
-        {contact.isBlocked ? <UserCheck className="w-4 h-4 mr-2" /> : <UserX className="w-4 h-4 mr-2" />}
-        {contact.isBlocked ? 'Unblock' : 'Block'} Contact
-      </DropdownMenuItem>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            Delete Contact
-          </DropdownMenuItem>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {contact.name}? This will remove them from your contacts and unsubscribe from their presence updates.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => handleDeleteContact(contact)}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete Contact
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </DropdownMenuContent>
-  );
+  const ContactMenu = ({ contact }: { contact: any }) => {
+    const isDeleting = deletingContacts.has(contact.jid);
+    
+    return (
+      <DropdownMenuContent>
+        <DropdownMenuItem onClick={() => handleMuteContact(contact)}>
+          {contact.isMuted ? <Bell className="w-4 h-4 mr-2" /> : <BellOff className="w-4 h-4 mr-2" />}
+          {contact.isMuted ? 'Unmute' : 'Mute'} Contact
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => contact.isBlocked ? handleUnblockContact(contact) : handleBlockContact(contact)}>
+          {contact.isBlocked ? <UserCheck className="w-4 h-4 mr-2" /> : <UserX className="w-4 h-4 mr-2" />}
+          {contact.isBlocked ? 'Unblock' : 'Block'} Contact
+        </DropdownMenuItem>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={isDeleting}>
+              {isDeleting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              {isDeleting ? 'Deleting...' : 'Delete Contact'}
+            </DropdownMenuItem>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {contact.name}? This will remove them from your contacts and unsubscribe from their presence updates. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => handleDeleteContact(contact)}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Contact'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DropdownMenuContent>
+    );
+  };
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>

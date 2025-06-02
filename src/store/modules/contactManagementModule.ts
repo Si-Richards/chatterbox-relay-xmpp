@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Contact } from '../types';
 
@@ -75,23 +74,50 @@ export const createContactManagementModule = (set: any, get: any) => ({
     console.log(`Contact ${jid} has been unblocked`);
   },
 
-  deleteContact: (jid: string) => {
-    const { client } = get();
+  deleteContact: async (jid: string) => {
+    console.log(`Starting contact deletion process for: ${jid}`);
     
-    // Remove from local state
-    set((state: any) => ({
-      contacts: state.contacts.filter((contact: Contact) => contact.jid !== jid),
-      messages: Object.fromEntries(
-        Object.entries(state.messages).filter(([chatJid]) => chatJid !== jid)
-      ),
-      // Also clear from muted/blocked lists
-      mutedContacts: state.mutedContacts.filter((muted: string) => muted !== jid),
-      blockedContacts: state.blockedContacts.filter((blocked: string) => blocked !== jid)
-    }));
+    const { client, isConnected, contacts } = get();
+    
+    // Check if contact exists in the current list
+    const contactExists = contacts.find((contact: Contact) => contact.jid === jid);
+    if (!contactExists) {
+      console.log(`Contact ${jid} not found in contacts list`);
+      return;
+    }
+    
+    // Check if client is connected
+    if (!client || !isConnected) {
+      console.error(`Cannot delete contact ${jid}: XMPP client not connected`);
+      throw new Error('Not connected to XMPP server. Please reconnect and try again.');
+    }
 
-    // Send roster removal and presence unsubscription
-    if (client) {
-      // Remove from roster
+    try {
+      console.log(`Updating local state for contact deletion: ${jid}`);
+      
+      // Remove from local state immediately for better UX
+      set((state: any) => {
+        console.log(`Removing ${jid} from contacts array (${state.contacts.length} contacts before)`);
+        const updatedContacts = state.contacts.filter((contact: Contact) => contact.jid !== jid);
+        console.log(`Contacts after removal: ${updatedContacts.length}`);
+        
+        // Clear messages for this contact
+        const updatedMessages = Object.fromEntries(
+          Object.entries(state.messages).filter(([chatJid]) => chatJid !== jid)
+        );
+        console.log(`Cleared messages for ${jid}`);
+        
+        return {
+          contacts: updatedContacts,
+          messages: updatedMessages,
+          // Also clear from muted/blocked lists
+          mutedContacts: state.mutedContacts.filter((muted: string) => muted !== jid),
+          blockedContacts: state.blockedContacts.filter((blocked: string) => blocked !== jid)
+        };
+      });
+
+      // Send roster removal stanza
+      console.log(`Sending roster removal stanza for: ${jid}`);
       const rosterRemoveStanza = xml(
         'iq',
         { type: 'set', id: `roster-remove-${Date.now()}` },
@@ -99,19 +125,30 @@ export const createContactManagementModule = (set: any, get: any) => ({
           xml('item', { jid, subscription: 'remove' })
         )
       );
-      client.send(rosterRemoveStanza);
+      
+      await client.send(rosterRemoveStanza);
+      console.log(`Roster removal stanza sent successfully for ${jid}`);
 
       // Send unsubscribe presence
+      console.log(`Sending unsubscribe presence for: ${jid}`);
       const unsubscribeStanza = xml('presence', { to: jid, type: 'unsubscribe' });
-      client.send(unsubscribeStanza);
+      await client.send(unsubscribeStanza);
+      console.log(`Unsubscribe stanza sent successfully for ${jid}`);
 
       // Send unsubscribed presence  
+      console.log(`Sending unsubscribed presence for: ${jid}`);
       const unsubscribedStanza = xml('presence', { to: jid, type: 'unsubscribed' });
-      client.send(unsubscribedStanza);
+      await client.send(unsubscribedStanza);
+      console.log(`Unsubscribed stanza sent successfully for ${jid}`);
 
-      console.log(`Sent roster removal and unsubscribe stanzas for ${jid}`);
+      console.log(`✅ Contact ${jid} has been successfully deleted`);
+      
+    } catch (error) {
+      console.error(`❌ Error deleting contact ${jid}:`, error);
+      
+      // If XMPP operations failed, we might want to revert the local state
+      // But for now, we'll keep the local deletion and let the user know about the server error
+      throw new Error(`Failed to delete contact from server: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    console.log(`Contact ${jid} has been deleted`);
   }
 });
