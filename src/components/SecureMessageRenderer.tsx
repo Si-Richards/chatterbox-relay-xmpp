@@ -39,7 +39,7 @@ marked.use({ renderer });
 
 const parseMarkdownSafely = (text: string): string => {
   try {
-    // Use the synchronous version of marked for simplicity
+    console.log('Parsing markdown text:', text.substring(0, 100));
     const parsedMarkdown = marked(text) as string;
     
     // Then sanitize with DOMPurify with strict settings
@@ -49,6 +49,7 @@ const parseMarkdownSafely = (text: string): string => {
       ALLOW_DATA_ATTR: false
     });
     
+    console.log('Markdown parsed successfully');
     return sanitized;
   } catch (error) {
     console.error('Error parsing markdown:', error);
@@ -63,22 +64,37 @@ const parseMarkdownSafely = (text: string): string => {
 };
 
 const parseBasicFormattingSafely = (text: string): string => {
-  // Simple and safe text formatting without HTML
-  let formatted = text;
-  
-  // Bold: **text** or __text__
-  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  formatted = formatted.replace(/__(.*?)__/g, '<strong>$1</strong>');
-  
-  // Italic: *text* or _text_ (but not if already in bold)
-  formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
-  formatted = formatted.replace(/(?<!_)_([^_]+?)_(?!_)/g, '<em>$1</em>');
-  
-  // Sanitize the result
-  return DOMPurify.sanitize(formatted, {
-    ALLOWED_TAGS: ['strong', 'em', 'b', 'i'],
-    ALLOWED_ATTR: []
-  });
+  try {
+    console.log('Parsing basic formatting for text:', text.substring(0, 100));
+    let formatted = text;
+    
+    // Bold: **text** or __text__ - using safer regex without lookbehind
+    formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/__([^_]+?)__/g, '<strong>$1</strong>');
+    
+    // Italic: *text* or _text_ - avoiding conflicts with bold formatting
+    // First handle single asterisks that aren't part of double asterisks
+    formatted = formatted.replace(/(\s|^)\*([^*\s][^*]*?[^*\s])\*(\s|$)/g, '$1<em>$2</em>$3');
+    formatted = formatted.replace(/(\s|^)_([^_\s][^_]*?[^_\s])_(\s|$)/g, '$1<em>$2</em>$3');
+    
+    // Sanitize the result
+    const sanitized = DOMPurify.sanitize(formatted, {
+      ALLOWED_TAGS: ['strong', 'em', 'b', 'i'],
+      ALLOWED_ATTR: []
+    });
+    
+    console.log('Basic formatting parsed successfully');
+    return sanitized;
+  } catch (error) {
+    console.error('Error parsing basic formatting:', error);
+    // Return escaped text as fallback
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  }
 };
 
 export const SecureMessageRenderer: React.FC<SecureMessageRendererProps> = ({
@@ -86,17 +102,29 @@ export const SecureMessageRenderer: React.FC<SecureMessageRendererProps> = ({
   markdownEnabled,
   className = "text-sm break-words whitespace-pre-wrap"
 }) => {
-  // Sanitize input first
-  const sanitizedContent = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] });
-  
-  const processedContent = markdownEnabled 
-    ? parseMarkdownSafely(sanitizedContent)
-    : parseBasicFormattingSafely(sanitizedContent);
+  try {
+    console.log('SecureMessageRenderer rendering with markdownEnabled:', markdownEnabled);
+    
+    // Sanitize input first
+    const sanitizedContent = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] });
+    
+    const processedContent = markdownEnabled 
+      ? parseMarkdownSafely(sanitizedContent)
+      : parseBasicFormattingSafely(sanitizedContent);
 
-  return (
-    <div 
-      className={className}
-      dangerouslySetInnerHTML={{ __html: processedContent }}
-    />
-  );
+    return (
+      <div 
+        className={className}
+        dangerouslySetInnerHTML={{ __html: processedContent }}
+      />
+    );
+  } catch (error) {
+    console.error('SecureMessageRenderer error:', error);
+    // Fallback to plain text rendering
+    return (
+      <div className={className}>
+        {content}
+      </div>
+    );
+  }
 };
