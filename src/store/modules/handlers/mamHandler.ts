@@ -29,27 +29,37 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
   // Check if MAM message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(originalMessage);
   
-  // Determine if this message was sent by the current user
+  // Improved message ownership detection
   let isSentByCurrentUser = false;
   let chatJid = '';
+  
+  const currentUserJid = currentUser.split('/')[0];
+  const currentUserNick = currentUser.split('@')[0];
   
   if (mamType === 'groupchat') {
     // For group chats, check if the nickname part matches current user
     const fromNick = mamFrom.split('/')[1];
-    const currentUserNick = currentUser.split('@')[0];
-    isSentByCurrentUser = fromNick === currentUserNick || mamFrom.includes(currentUserNick);
-    chatJid = mamFrom.split('/')[0];
+    const roomJid = mamFrom.split('/')[0];
+    
+    // More robust ownership detection for group chats
+    isSentByCurrentUser = fromNick === currentUserNick || 
+                         mamFrom === `${roomJid}/${currentUserNick}` ||
+                         mamFrom.includes(`/${currentUserNick}`);
+    chatJid = roomJid;
   } else {
-    // For direct chats, check if from matches current user JID
-    isSentByCurrentUser = mamFrom === currentUser || mamFrom.split('/')[0] === currentUser.split('/')[0];
-    chatJid = isSentByCurrentUser ? mamTo.split('/')[0] : mamFrom.split('/')[0];
+    // For direct chats, check if from matches current user JID (more precise)
+    const fromJid = mamFrom.split('/')[0];
+    isSentByCurrentUser = fromJid === currentUserJid || mamFrom === currentUser;
+    chatJid = isSentByCurrentUser ? mamTo.split('/')[0] : fromJid;
   }
   
-  // Debug logging
-  console.log('MAM Message Processing:', {
+  // Debug logging with more details
+  console.log('MAM Message Ownership Detection:', {
     mamFrom,
     mamTo,
     currentUser,
+    currentUserJid,
+    currentUserNick,
     mamType,
     isSentByCurrentUser,
     chatJid

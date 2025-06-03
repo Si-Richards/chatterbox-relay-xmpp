@@ -77,7 +77,11 @@ export const createConnectionModule = (set: any, get: any) => ({
         
         // Start comprehensive data refresh after initial connection
         setTimeout(() => {
-          const { refreshAllData } = get();
+          const { refreshAllData, restoreRoomOwnership } = get();
+          
+          // Restore room ownership from localStorage
+          restoreRoomOwnership();
+          
           refreshAllData().catch(error => {
             console.error('Initial data refresh failed:', error);
           });

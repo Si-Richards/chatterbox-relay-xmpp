@@ -63,6 +63,11 @@ export const createRoomModule = (set: any, get: any) => ({
     set((state: any) => ({
       rooms: [...state.rooms, newRoom]
     }));
+
+    // Store room ownership persistently
+    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+    roomOwnership[roomJid] = currentUser;
+    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
   },
 
   joinRoom: (roomJid: string) => {
@@ -77,7 +82,7 @@ export const createRoomModule = (set: any, get: any) => ({
 
     client.send(presence);
     
-    // Fetch affiliations after joining
+    // Fetch affiliations after joining to determine ownership
     setTimeout(() => {
       const module = get();
       if (module.fetchRoomAffiliations) {
@@ -185,7 +190,7 @@ export const createRoomModule = (set: any, get: any) => ({
   },
 
   fetchRoomAffiliations: async (roomJid: string) => {
-    const { client } = get();
+    const { client, currentUser } = get();
     if (!client) return;
 
     console.log('Fetching affiliations for room:', roomJid);
@@ -218,5 +223,20 @@ export const createRoomModule = (set: any, get: any) => ({
     );
 
     client.send(affiliationIq);
+  },
+
+  // Add method to restore room ownership from localStorage
+  restoreRoomOwnership: () => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+    
+    set((state: any) => ({
+      rooms: state.rooms.map((room: Room) => ({
+        ...room,
+        isOwner: roomOwnership[room.jid] === currentUser
+      }))
+    }));
   }
 });

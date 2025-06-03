@@ -201,6 +201,7 @@ export interface XMPPState {
   muteRoom: (jid: string) => void;
   unmuteRoom: (jid: string) => void;
   leaveRoom: (jid: string) => void;
+  restoreRoomOwnership: () => void;
 
   // Typing methods
   sendChatState: (to: string, state: 'composing' | 'active' | 'paused' | 'inactive' | 'gone', type: 'chat' | 'groupchat') => void;

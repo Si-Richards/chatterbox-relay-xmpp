@@ -54,10 +54,21 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
                 updatedAffiliations = [...affiliations, newAffiliation];
               }
               
-              // Set owner status for current user
-              const isOwner = isCurrentUser ? 
-                (affiliation === 'owner') : 
-                room.isOwner;
+              // Check ownership from localStorage first, then from affiliation
+              const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+              let isOwner = room.isOwner;
+              
+              if (isCurrentUser) {
+                // Check localStorage first
+                if (roomOwnership[roomJid] === currentUser) {
+                  isOwner = true;
+                } else if (affiliation === 'owner') {
+                  isOwner = true;
+                  // Store in localStorage for future sessions
+                  roomOwnership[roomJid] = currentUser;
+                  localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+                }
+              }
               
               console.log(`Updated room ${roomJid}: isOwner=${isOwner}, affiliations count=${updatedAffiliations.length}`);
               
@@ -76,6 +87,12 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
       const hasCode201 = statusElements.some((status: any) => status.attrs.code === '201');
       if (hasCode201 && isCurrentUser) {
         console.log(`User created room ${roomJid}, setting as owner`);
+        
+        // Store ownership in localStorage
+        const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+        roomOwnership[roomJid] = currentUser;
+        localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+        
         set((state: any) => ({
           rooms: state.rooms.map((room: Room) => 
             room.jid === roomJid ? { ...room, isOwner: true } : room
