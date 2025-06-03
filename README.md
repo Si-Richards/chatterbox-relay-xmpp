@@ -122,26 +122,7 @@ npm run dev
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build locally
 
-## 🌐 Deployment
-
-### Lovable Platform
-Simply open [Lovable](https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897) and click Share → Publish.
-
-### Custom Domain
-Connect your custom domain through Project → Settings → Domains in Lovable.
-
-### Self-Hosting
-The application can be deployed to any static hosting service:
-- Build the project with `npm run build`
-- Deploy the `dist` folder to your hosting provider
-- Configure environment variables as needed
-
 ## 🔗 XMPP Server Configuration
-
-The application is configured to connect to:
-- **Server**: ejabberd.voicehost.io
-- **WebSocket endpoint**: wss://ejabberd.voicehost.io:443/websocket
-- **Conference service**: conference.ejabberd.voicehost.io
 
 ### Required Server Features
 - WebSocket connections (RFC 7395)
@@ -166,8 +147,6 @@ The application is configured to connect to:
 
 ## 📄 License
 
-This project is built with modern web technologies and follows best practices for real-time communication applications.
+AGPL-3.0
 
 ---
-
-**Project URL**: https://lovable.dev/projects/9b6f960c-138d-43a1-806a-7ffe4db1b897
