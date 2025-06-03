@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, UserPlus, UserMinus } from 'lucide-react';
 import { useXMPPStore, Room } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 import { validateJID, validateAffiliation, sanitizeInput } from '@/utils/validation';
@@ -22,10 +22,12 @@ export const AffiliationForm: React.FC<AffiliationFormProps> = ({
 }) => {
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedAffiliation, setSelectedAffiliation] = useState<'owner' | 'admin' | 'member' | 'none'>('member');
+  const [inviteReason, setInviteReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inputError, setInputError] = useState('');
+  const [actionType, setActionType] = useState<'invite' | 'affiliation'>('invite');
   
-  const { setRoomAffiliation, currentUser } = useXMPPStore();
+  const { setRoomAffiliation, inviteUserToRoom, kickUserFromRoom, currentUser } = useXMPPStore();
 
   const validateInput = (userJid: string): boolean => {
     setInputError('');
@@ -41,17 +43,46 @@ export const AffiliationForm: React.FC<AffiliationFormProps> = ({
       return false;
     }
     
-    if (!validateAffiliation(selectedAffiliation)) {
+    if (actionType === 'affiliation' && !validateAffiliation(selectedAffiliation)) {
       setInputError('Invalid affiliation selected');
       return false;
     }
     
-    if (!canSetAffiliation(room, currentUser, selectedAffiliation)) {
+    if (actionType === 'affiliation' && !canSetAffiliation(room, currentUser, selectedAffiliation)) {
       setInputError('You do not have permission to set this affiliation');
       return false;
     }
     
     return true;
+  };
+
+  const handleInviteUser = async () => {
+    if (!validateInput(selectedUser)) return;
+    
+    const sanitizedJid = sanitizeInput(selectedUser);
+    setIsSubmitting(true);
+    
+    try {
+      await retryOperation(async () => {
+        inviteUserToRoom(room.jid, sanitizedJid, inviteReason);
+      });
+      
+      setSelectedUser('');
+      setInviteReason('');
+      setInputError('');
+      
+      toast({
+        title: "Invitation Sent",
+        description: `Invitation sent to ${sanitizedJid}`
+      });
+
+      onRefreshAffiliations();
+    } catch (error) {
+      handleXMPPError(error, 'Failed to send invitation');
+      setInputError('Failed to send invitation. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSetAffiliation = async () => {
@@ -86,55 +117,99 @@ export const AffiliationForm: React.FC<AffiliationFormProps> = ({
     }
   };
 
+  const handleSubmit = () => {
+    if (actionType === 'invite') {
+      handleInviteUser();
+    } else {
+      handleSetAffiliation();
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      <Label className="text-sm font-medium">Add User Permission</Label>
-      <div className="space-y-2">
-        <div className="flex space-x-2">
-          <div className="flex-1">
+    <div className="space-y-4">
+      <div className="flex space-x-2">
+        <Button
+          variant={actionType === 'invite' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActionType('invite')}
+        >
+          <UserPlus className="h-4 w-4 mr-1" />
+          Invite User
+        </Button>
+        <Button
+          variant={actionType === 'affiliation' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActionType('affiliation')}
+        >
+          <UserMinus className="h-4 w-4 mr-1" />
+          Set Permission
+        </Button>
+      </div>
+
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">
+          {actionType === 'invite' ? 'Invite User to Room' : 'Set User Permission'}
+        </Label>
+        <div className="space-y-2">
+          <div className="flex space-x-2">
+            <div className="flex-1">
+              <Input
+                placeholder="user@domain.com"
+                value={selectedUser}
+                onChange={(e) => {
+                  setSelectedUser(e.target.value);
+                  setInputError('');
+                }}
+                className={inputError ? 'border-red-500' : ''}
+                disabled={isSubmitting}
+              />
+              {inputError && (
+                <div className="flex items-center mt-1 text-sm text-red-600">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {inputError}
+                </div>
+              )}
+            </div>
+            
+            {actionType === 'affiliation' && (
+              <Select 
+                value={selectedAffiliation} 
+                onValueChange={(value: any) => setSelectedAffiliation(value)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  {room.isOwner && <SelectItem value="owner">Owner</SelectItem>}
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            
+            <Button 
+              onClick={handleSubmit} 
+              disabled={!selectedUser || isSubmitting}
+              className="min-w-[80px]"
+            >
+              {isSubmitting ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                actionType === 'invite' ? 'Invite' : 'Set'
+              )}
+            </Button>
+          </div>
+          
+          {actionType === 'invite' && (
             <Input
-              placeholder="user@domain.com"
-              value={selectedUser}
-              onChange={(e) => {
-                setSelectedUser(e.target.value);
-                setInputError('');
-              }}
-              className={inputError ? 'border-red-500' : ''}
+              placeholder="Invitation reason (optional)"
+              value={inviteReason}
+              onChange={(e) => setInviteReason(e.target.value)}
               disabled={isSubmitting}
             />
-            {inputError && (
-              <div className="flex items-center mt-1 text-sm text-red-600">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {inputError}
-              </div>
-            )}
-          </div>
-          <Select 
-            value={selectedAffiliation} 
-            onValueChange={(value: any) => setSelectedAffiliation(value)}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="member">Member</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-              {room.isOwner && <SelectItem value="owner">Owner</SelectItem>}
-              <SelectItem value="none">None</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button 
-            onClick={handleSetAffiliation} 
-            disabled={!selectedUser || isSubmitting}
-            className="min-w-[60px]"
-          >
-            {isSubmitting ? (
-              <RefreshCw className="h-3 w-3 animate-spin" />
-            ) : (
-              'Set'
-            )}
-          </Button>
+          )}
         </div>
       </div>
     </div>

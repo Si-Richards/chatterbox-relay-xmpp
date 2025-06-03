@@ -1,3 +1,4 @@
+
 import { xml } from '@xmpp/client';
 import { Room } from '../types';
 
@@ -49,12 +50,12 @@ export const createRoomModule = (set: any, get: any) => ({
       client.send(configForm);
     }, 1000);
 
-    // Add to local state
+    // Add to local state - only include current user, not room name duplicates
     const newRoom: Room = {
       jid: roomJid,
       name: roomName,
       description,
-      participants: [currentUser],
+      participants: [currentUser], // Only current user initially
       isOwner: true,
       isPermanent
     };
@@ -83,6 +84,44 @@ export const createRoomModule = (set: any, get: any) => ({
         module.fetchRoomAffiliations(roomJid);
       }
     }, 2000);
+  },
+
+  inviteUserToRoom: (roomJid: string, userJid: string, reason: string = '') => {
+    const { client } = get();
+    if (!client) return;
+
+    console.log(`Inviting ${userJid} to room ${roomJid}`);
+
+    const inviteMessage = xml(
+      'message',
+      { to: roomJid },
+      xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' },
+        xml('invite', { to: userJid },
+          reason ? xml('reason', {}, reason) : null
+        )
+      )
+    );
+
+    client.send(inviteMessage);
+  },
+
+  kickUserFromRoom: (roomJid: string, userNickname: string, reason: string = '') => {
+    const { client } = get();
+    if (!client) return;
+
+    console.log(`Kicking ${userNickname} from room ${roomJid}`);
+
+    const kickIq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `kick-${Date.now()}` },
+      xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
+        xml('item', { nick: userNickname, role: 'none' },
+          reason ? xml('reason', {}, reason) : null
+        )
+      )
+    );
+
+    client.send(kickIq);
   },
 
   deleteRoom: (roomJid: string) => {

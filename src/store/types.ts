@@ -191,6 +191,8 @@ export interface XMPPState {
   // Room methods
   createRoom: (roomName: string, description?: string, isPermanent?: boolean, privacyOptions?: any) => void;
   joinRoom: (roomJid: string) => void;
+  inviteUserToRoom: (roomJid: string, userJid: string, reason?: string) => void;
+  kickUserFromRoom: (roomJid: string, userNickname: string, reason?: string) => void;
   deleteRoom: (roomJid: string) => void;
   updateRoomDescription: (roomJid: string, description: string) => void;
   setRoomAvatar: (roomJid: string, avatarUrl: string) => void;
