@@ -13,13 +13,19 @@ export const canManageRoom = (room: Room, currentUser: string): boolean => {
   
   // Check affiliations for admin or owner roles
   if (room.affiliations) {
-    const currentUserNickname = currentUser.split('@')[0];
-    const userAffiliation = room.affiliations.find(
-      aff => aff.jid === currentUser || 
-             aff.jid.includes(currentUser) || 
-             aff.name === currentUserNickname ||
-             aff.jid.startsWith(currentUserNickname)
-    );
+    const currentUserBareJid = currentUser.split('/')[0]; // Remove resource if present
+    const currentUserNickname = currentUser.split('@')[0]; // Extract username part
+    
+    const userAffiliation = room.affiliations.find(aff => {
+      const affBareJid = aff.jid.split('/')[0]; // Remove resource if present
+      const affNickname = aff.jid.split('@')[0]; // Extract username part
+      
+      // Exact matching: compare bare JIDs or exact nickname matches
+      return affBareJid === currentUserBareJid || 
+             aff.jid === currentUser ||
+             (aff.name && aff.name === currentUserNickname) ||
+             affNickname === currentUserNickname;
+    });
     
     console.log('Found user affiliation:', userAffiliation);
     
