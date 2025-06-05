@@ -148,8 +148,11 @@ export interface XMPPState {
   // Data refresh methods
   refreshAllData: () => Promise<void>;
   refreshContacts: () => Promise<void>;
-  refreshMessages: () => Promise<void>;
   refreshRooms: () => Promise<void>;
+  refreshDirectMessages: () => Promise<void>;
+  refreshAllRoomMessages: () => Promise<void>;
+  refreshRoomMessages: (roomJid: string) => Promise<void>;
+  refreshAllRoomAffiliations: () => Promise<void>;
   setRefreshState: (updates: Partial<RefreshState>) => void;
   sendPresenceProbes: () => void;
   retryOperation: <T>(operation: () => Promise<T>, maxRetries?: number, delay?: number) => Promise<T>;
