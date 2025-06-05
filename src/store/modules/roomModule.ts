@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Room } from '../types';
 
@@ -189,25 +188,59 @@ export const createRoomModule = (set: any, get: any) => ({
     }));
   },
 
-  fetchRoomAffiliations: async (roomJid: string) => {
-    const { client, currentUser } = get();
-    if (!client) return;
+  fetchRoomAffiliations: async (roomJid: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const { client, currentUser } = get();
+      if (!client) {
+        reject(new Error('No client connection'));
+        return;
+      }
 
-    console.log('Fetching affiliations for room:', roomJid);
+      console.log('Fetching affiliations for room:', roomJid);
+      const requestId = `affiliations-${Date.now()}`;
+      let resolved = false;
 
-    // Query for all affiliation types
-    const affiliationQuery = xml(
-      'iq',
-      { type: 'get', to: roomJid, id: `affiliations-${Date.now()}` },
-      xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
-        xml('item', { affiliation: 'owner' }),
-        xml('item', { affiliation: 'admin' }),
-        xml('item', { affiliation: 'member' }),
-        xml('item', { affiliation: 'none' })
-      )
-    );
+      const handleResponse = (stanza: any) => {
+        if (stanza.is('iq') && stanza.attrs.id === requestId && !resolved) {
+          resolved = true;
+          client.off('stanza', handleResponse);
+          
+          if (stanza.attrs.type === 'result') {
+            console.log(`Successfully fetched affiliations for room: ${roomJid}`);
+            resolve();
+          } else if (stanza.attrs.type === 'error') {
+            console.error(`Failed to fetch affiliations for room ${roomJid}:`, stanza);
+            reject(new Error(`Affiliation query failed for ${roomJid}`));
+          }
+        }
+      };
 
-    client.send(affiliationQuery);
+      client.on('stanza', handleResponse);
+
+      // Query for all affiliation types
+      const affiliationQuery = xml(
+        'iq',
+        { type: 'get', to: roomJid, id: requestId },
+        xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
+          xml('item', { affiliation: 'owner' }),
+          xml('item', { affiliation: 'admin' }),
+          xml('item', { affiliation: 'member' }),
+          xml('item', { affiliation: 'none' })
+        )
+      );
+
+      client.send(affiliationQuery);
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          client.off('stanza', handleResponse);
+          console.warn(`Affiliation query timeout for room: ${roomJid}`);
+          resolve(); // Don't fail on timeout, just resolve
+        }
+      }, 10000);
+    });
   },
 
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: string, role: string) => {
@@ -230,13 +263,20 @@ export const createRoomModule = (set: any, get: any) => ({
     const { currentUser } = get();
     if (!currentUser) return;
 
+    console.log('Restoring room ownership from localStorage...');
     const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
     
     set((state: any) => ({
-      rooms: state.rooms.map((room: Room) => ({
-        ...room,
-        isOwner: roomOwnership[room.jid] === currentUser
-      }))
+      rooms: state.rooms.map((room: Room) => {
+        const isOwner = roomOwnership[room.jid] === currentUser.split('/')[0]; // Compare bare JID
+        console.log(`Room ${room.name}: isOwner=${isOwner} (stored: ${roomOwnership[room.jid]}, current: ${currentUser.split('/')[0]})`);
+        return {
+          ...room,
+          isOwner
+        };
+      })
     }));
+    
+    console.log('Room ownership restoration completed');
   }
 });

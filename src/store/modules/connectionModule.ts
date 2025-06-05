@@ -1,4 +1,3 @@
-
 import { client, xml } from '@xmpp/client';
 import { XMPPState } from '../types';
 import { createUserStatusModule } from './userStatusModule';
@@ -77,10 +76,7 @@ export const createConnectionModule = (set: any, get: any) => ({
         
         // Start comprehensive data refresh after initial connection
         setTimeout(() => {
-          const { refreshAllData, restoreRoomOwnership } = get();
-          
-          // Restore room ownership from localStorage
-          restoreRoomOwnership();
+          const { refreshAllData } = get();
           
           refreshAllData().catch(error => {
             console.error('Initial data refresh failed:', error);

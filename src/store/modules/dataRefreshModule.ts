@@ -32,11 +32,15 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       // Phase 1: Load contacts first
       await get().refreshContacts();
       
-      // Phase 2: Load messages after contacts are loaded
+      // Phase 2: Load messages after contacts are loaded (with full history)
       await get().refreshMessages();
       
-      // Phase 3: Load rooms last
+      // Phase 3: Load rooms and restore ownership
       await get().refreshRooms();
+      
+      // Phase 4: Restore room ownership and fetch affiliations
+      get().restoreRoomOwnership();
+      await get().refreshAllRoomAffiliations();
       
       setRefreshState({ 
         isRefreshing: false, 
@@ -49,7 +53,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         duration: 2000
       });
 
-      // Phase 4: Send presence probes to contacts in batches
+      // Phase 5: Send presence probes to contacts in batches
       setTimeout(() => {
         get().sendPresenceProbes();
       }, 1000);
@@ -124,28 +128,40 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         return;
       }
 
-      console.log('Refreshing messages...');
+      console.log('Refreshing messages with full history...');
       const requestId = `mam-refresh-${Date.now()}`;
       let resolved = false;
 
-      // MAM doesn't send a direct response, so we'll wait for messages to start coming in
+      // Request all messages from the past 30 days to ensure we get full history
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
       const mamQuery = xml(
         'iq',
         { type: 'set', id: requestId },
-        xml('query', { xmlns: 'urn:xmpp:mam:2' })
+        xml('query', { xmlns: 'urn:xmpp:mam:2' },
+          xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+            xml('field', { var: 'FORM_TYPE' },
+              xml('value', {}, 'urn:xmpp:mam:2')
+            ),
+            xml('field', { var: 'start' },
+              xml('value', {}, thirtyDaysAgo.toISOString())
+            )
+          )
+        )
       );
       
       client.send(mamQuery);
       
-      // Give MAM some time to send messages, then consider it done
+      // Give MAM more time to send all messages
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          console.log('Messages refresh completed');
+          console.log('Messages refresh completed (full history)');
           setRefreshState({ messagesLoaded: true });
           resolve();
         }
-      }, 3000);
+      }, 5000);
     });
   },
 
@@ -198,6 +214,25 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         }
       }, 8000);
     });
+  },
+
+  refreshAllRoomAffiliations: async () => {
+    const { rooms, fetchRoomAffiliations } = get();
+    
+    console.log('Refreshing affiliations for all rooms...');
+    
+    // Fetch affiliations for all rooms in parallel
+    const affiliationPromises = rooms.map(async (room: any) => {
+      try {
+        console.log(`Fetching affiliations for room: ${room.jid}`);
+        await fetchRoomAffiliations(room.jid);
+      } catch (error) {
+        console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
+      }
+    });
+    
+    await Promise.allSettled(affiliationPromises);
+    console.log('Finished refreshing all room affiliations');
   },
 
   sendPresenceProbes: () => {
