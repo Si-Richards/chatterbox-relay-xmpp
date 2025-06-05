@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { Room } from '../types';
 
@@ -8,11 +7,21 @@ export const createRoomModule = (set: any, get: any) => ({
     if (!client) return;
 
     const roomJid = `${roomName}@conference.ejabberd.voicehost.io`;
+    const currentUserBareJid = currentUser.split('/')[0];
+    const nickname = currentUser.split('@')[0];
+    
+    console.log(`Creating room: ${roomJid} with owner: ${currentUserBareJid}`);
+    
+    // Store ownership in localStorage BEFORE joining
+    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+    roomOwnership[roomJid] = currentUserBareJid;
+    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+    console.log(`Pre-stored room ownership: ${roomJid} -> ${currentUserBareJid}`);
     
     // Join the room first
     const presence = xml(
       'presence',
-      { to: `${roomJid}/${currentUser.split('@')[0]}` },
+      { to: `${roomJid}/${nickname}` },
       xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
     );
     
@@ -50,36 +59,33 @@ export const createRoomModule = (set: any, get: any) => ({
       client.send(configForm);
     }, 1000);
 
-    // Add to local state - only include current user, not room name duplicates
+    // Add to local state with ownership
     const newRoom: Room = {
       jid: roomJid,
       name: roomName,
       description,
-      participants: [currentUser], // Only current user initially
-      isOwner: true,
+      participants: [`${roomJid}/${nickname}`], // Add user as participant
+      isOwner: true, // Set as owner immediately
       isPermanent
     };
 
     set((state: any) => ({
       rooms: [...state.rooms, newRoom]
     }));
-
-    // Store room ownership persistently with bare JID
-    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-    const currentUserBareJid = currentUser.split('/')[0];
-    roomOwnership[roomJid] = currentUserBareJid;
-    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
     
-    console.log(`Stored room ownership: ${roomJid} -> ${currentUserBareJid}`);
+    console.log(`Room created in local state: ${roomJid} with isOwner=true`);
   },
 
   joinRoom: (roomJid: string) => {
     const { client, currentUser } = get();
     if (!client) return;
 
+    const nickname = currentUser.split('@')[0];
+    console.log(`Joining room: ${roomJid} as ${nickname}`);
+
     const presence = xml(
       'presence',
-      { to: `${roomJid}/${currentUser.split('@')[0]}` },
+      { to: `${roomJid}/${nickname}` },
       xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
     );
 
@@ -89,6 +95,7 @@ export const createRoomModule = (set: any, get: any) => ({
     setTimeout(() => {
       const module = get();
       if (module.fetchRoomAffiliations) {
+        console.log(`Fetching affiliations for joined room: ${roomJid}`);
         module.fetchRoomAffiliations(roomJid);
       }
     }, 2000);
@@ -216,6 +223,43 @@ export const createRoomModule = (set: any, get: any) => ({
           
           if (stanza.attrs.type === 'result') {
             console.log(`Successfully fetched affiliations for room: ${roomJid}`);
+            
+            // Process the affiliations response and check for ownership
+            const query = stanza.getChild('query', 'http://jabber.org/protocol/muc#admin');
+            if (query) {
+              const items = query.getChildren('item');
+              const currentUserBareJid = currentUser.split('/')[0];
+              let foundOwnership = false;
+              
+              items.forEach((item: any) => {
+                if (item.attrs.affiliation === 'owner') {
+                  const ownerJid = item.attrs.jid;
+                  const ownerBareJid = ownerJid?.split('/')[0];
+                  
+                  if (ownerBareJid === currentUserBareJid) {
+                    foundOwnership = true;
+                    console.log(`Found ownership for current user in room ${roomJid}`);
+                    
+                    // Store ownership in localStorage
+                    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+                    roomOwnership[roomJid] = currentUserBareJid;
+                    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+                    
+                    // Update room state
+                    set((state: any) => ({
+                      rooms: state.rooms.map((room: Room) =>
+                        room.jid === roomJid ? { ...room, isOwner: true } : room
+                      )
+                    }));
+                  }
+                }
+              });
+              
+              if (!foundOwnership) {
+                console.log(`No ownership found for current user in room ${roomJid}`);
+              }
+            }
+            
             resolve();
           } else if (stanza.attrs.type === 'error') {
             console.error(`Failed to fetch affiliations for room ${roomJid}:`, stanza);
@@ -267,7 +311,7 @@ export const createRoomModule = (set: any, get: any) => ({
     client.send(affiliationIq);
   },
 
-  // Improved method to restore room ownership from localStorage
+  // Enhanced method to restore room ownership from localStorage
   restoreRoomOwnership: () => {
     const { currentUser } = get();
     if (!currentUser) {

@@ -1,4 +1,3 @@
-
 import { xml } from '@xmpp/client';
 import { toast } from '@/hooks/use-toast';
 import { RefreshState } from '../types';
@@ -32,13 +31,13 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       // Phase 1: Load contacts first
       await get().refreshContacts();
       
-      // Phase 2: Load rooms and restore ownership
+      // Phase 2: Load rooms
       await get().refreshRooms();
       
-      // Phase 3: Restore room ownership from localStorage
+      // Phase 3: Restore room ownership from localStorage FIRST
       get().restoreRoomOwnership();
       
-      // Phase 4: Load room affiliations for all rooms
+      // Phase 4: Load room affiliations for all rooms to verify/update ownership
       await get().refreshAllRoomAffiliations();
       
       // Phase 5: Load direct messages
@@ -301,16 +300,16 @@ export const createDataRefreshModule = (set: any, get: any) => ({
   refreshAllRoomAffiliations: async () => {
     const { rooms, fetchRoomAffiliations } = get();
     
-    console.log('Refreshing affiliations for all rooms...');
+    console.log('Refreshing affiliations for all rooms to verify ownership...');
     
-    // Fetch affiliations for all rooms in smaller batches
+    // Fetch affiliations for all rooms, with focus on ownership verification
     const batchSize = 2;
     for (let i = 0; i < rooms.length; i += batchSize) {
       const batch = rooms.slice(i, i + batchSize);
       
       const affiliationPromises = batch.map(async (room: any) => {
         try {
-          console.log(`Fetching affiliations for room: ${room.jid}`);
+          console.log(`Fetching affiliations for room: ${room.jid} (current isOwner: ${room.isOwner})`);
           await fetchRoomAffiliations(room.jid);
         } catch (error) {
           console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);

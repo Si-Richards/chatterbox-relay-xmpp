@@ -11,6 +11,7 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
     const roomJid = from.split('/')[0];
     const nickname = from.split('/')[1];
     const currentUserNickname = currentUser.split('@')[0];
+    const currentUserBareJid = currentUser.split('/')[0];
 
     // Handle MUC status codes and affiliations
     const xElement = stanza.getChild('x', 'http://jabber.org/protocol/muc#user');
@@ -21,14 +22,72 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
       // Check if this is the current user joining
       const isCurrentUser = nickname === currentUserNickname;
       
-      if (itemElement) {
+      console.log(`MUC presence: room=${roomJid}, user=${nickname}, isCurrentUser=${isCurrentUser}, currentUserNickname=${currentUserNickname}`);
+      
+      if (itemElement && isCurrentUser) {
+        const affiliation = itemElement.attrs.affiliation || 'none';
+        const role = itemElement.attrs.role || 'none';
+        const jid = itemElement.attrs.jid || currentUserBareJid;
+        
+        console.log(`Current user MUC presence: affiliation=${affiliation}, role=${role}, jid=${jid}`);
+        
+        // Update room with current user's affiliation info
+        set((state: any) => ({
+          rooms: state.rooms.map((room: Room) => {
+            if (room.jid === roomJid) {
+              const affiliations = room.affiliations || [];
+              
+              // Remove any existing affiliation for current user to avoid duplicates
+              const filteredAffiliations = affiliations.filter(aff => 
+                aff.jid !== jid && 
+                aff.jid !== currentUser && 
+                aff.jid !== currentUserBareJid &&
+                aff.name !== nickname &&
+                aff.name !== currentUserNickname
+              );
+              
+              const newAffiliation: RoomAffiliation = {
+                jid: jid,
+                name: nickname,
+                affiliation: affiliation as 'owner' | 'admin' | 'member' | 'none',
+                role: role as 'moderator' | 'participant' | 'visitor' | 'none'
+              };
+              
+              const updatedAffiliations = [...filteredAffiliations, newAffiliation];
+              
+              // Determine ownership - check localStorage first, then affiliation
+              const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+              let isOwner = false;
+              
+              // Check localStorage first
+              if (roomOwnership[roomJid] === currentUserBareJid) {
+                isOwner = true;
+                console.log(`Ownership restored from localStorage for room: ${roomJid}`);
+              } else if (affiliation === 'owner') {
+                isOwner = true;
+                // Store in localStorage for future sessions
+                roomOwnership[roomJid] = currentUserBareJid;
+                localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+                console.log(`Ownership detected from affiliation and stored for room: ${roomJid}`);
+              }
+              
+              console.log(`Updated room ${roomJid}: isOwner=${isOwner}, affiliation=${affiliation}, affiliations count=${updatedAffiliations.length}`);
+              
+              return {
+                ...room,
+                isOwner,
+                affiliations: updatedAffiliations
+              };
+            }
+            return room;
+          })
+        }));
+      } else if (itemElement && !isCurrentUser) {
+        // Handle other users' affiliations
         const affiliation = itemElement.attrs.affiliation || 'none';
         const role = itemElement.attrs.role || 'none';
         const jid = itemElement.attrs.jid || from;
         
-        console.log(`MUC presence: user=${nickname}, affiliation=${affiliation}, role=${role}, isCurrentUser=${isCurrentUser}`);
-        
-        // Update room with affiliation info for any user
         set((state: any) => ({
           rooms: state.rooms.map((room: Room) => {
             if (room.jid === roomJid) {
@@ -36,7 +95,7 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
               
               // Find existing affiliation or create new one
               const existingIndex = affiliations.findIndex(aff => 
-                aff.jid === jid || aff.jid === currentUser || aff.name === nickname
+                aff.jid === jid || aff.name === nickname
               );
               
               const newAffiliation: RoomAffiliation = {
@@ -54,27 +113,8 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
                 updatedAffiliations = [...affiliations, newAffiliation];
               }
               
-              // Check ownership from localStorage first, then from affiliation
-              const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-              let isOwner = room.isOwner;
-              
-              if (isCurrentUser) {
-                // Check localStorage first
-                if (roomOwnership[roomJid] === currentUser) {
-                  isOwner = true;
-                } else if (affiliation === 'owner') {
-                  isOwner = true;
-                  // Store in localStorage for future sessions
-                  roomOwnership[roomJid] = currentUser;
-                  localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
-                }
-              }
-              
-              console.log(`Updated room ${roomJid}: isOwner=${isOwner}, affiliations count=${updatedAffiliations.length}`);
-              
               return {
                 ...room,
-                isOwner,
                 affiliations: updatedAffiliations
               };
             }
@@ -86,11 +126,11 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
       // Check for room creation status (code 201 means room was created)
       const hasCode201 = statusElements.some((status: any) => status.attrs.code === '201');
       if (hasCode201 && isCurrentUser) {
-        console.log(`User created room ${roomJid}, setting as owner`);
+        console.log(`User created room ${roomJid}, setting as owner immediately`);
         
-        // Store ownership in localStorage
+        // Store ownership in localStorage immediately
         const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-        roomOwnership[roomJid] = currentUser;
+        roomOwnership[roomJid] = currentUserBareJid;
         localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
         
         set((state: any) => ({
@@ -98,6 +138,8 @@ export const handlePresenceStanza = (stanza: any, set: any, get: any) => {
             room.jid === roomJid ? { ...room, isOwner: true } : room
           )
         }));
+        
+        console.log(`Room creation ownership stored: ${roomJid} -> ${currentUserBareJid}`);
       }
     }
 
