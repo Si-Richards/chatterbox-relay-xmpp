@@ -14,40 +14,44 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   // Check if message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(stanza);
   
-  // Improved message ownership detection
+  // Improved message ownership detection with exact matching
   let isSentByCurrentUser = false;
   let chatJid = '';
   
-  const currentUserJid = currentUser.split('/')[0];
-  const currentUserNick = currentUser.split('@')[0];
+  const currentUserBareJid = currentUser.split('/')[0]; // Remove resource
+  const currentUserNickname = currentUser.split('@')[0]; // Username part only
   
   if (type === 'groupchat') {
-    // For group chats, check nickname and full JID matching
-    const fromNick = from.split('/')[1];
+    // For group chats - extract room and nickname
     const roomJid = from.split('/')[0];
+    const fromNickname = from.split('/')[1];
     
-    // More robust ownership detection
-    isSentByCurrentUser = fromNick === currentUserNick || 
-                         from === `${roomJid}/${currentUserNick}` ||
-                         from.includes(`/${currentUserNick}`);
+    // Exact nickname matching for group messages
+    isSentByCurrentUser = fromNickname === currentUserNickname;
     chatJid = roomJid;
+    
+    console.log('Regular Groupchat Ownership Check:', {
+      fromNickname,
+      currentUserNickname,
+      from,
+      isSentByCurrentUser
+    });
   } else {
-    // For direct chats, check JID matching
-    const fromJid = from.split('/')[0];
-    isSentByCurrentUser = fromJid === currentUserJid || from === currentUser;
-    chatJid = isSentByCurrentUser ? to.split('/')[0] : fromJid;
+    // For direct chats - exact JID matching
+    const fromBareJid = from.split('/')[0];
+    const toBareJid = to.split('/')[0];
+    
+    isSentByCurrentUser = fromBareJid === currentUserBareJid;
+    chatJid = isSentByCurrentUser ? toBareJid : fromBareJid;
+    
+    console.log('Regular Direct Chat Ownership Check:', {
+      fromBareJid,
+      currentUserBareJid,
+      from,
+      to,
+      isSentByCurrentUser
+    });
   }
-
-  console.log('Regular Message Ownership Detection:', {
-    from,
-    to,
-    currentUser,
-    currentUserJid,
-    currentUserNick,
-    type,
-    isSentByCurrentUser,
-    chatJid
-  });
 
   // Don't process messages we sent ourselves (they're already in state from sendMessage)
   if (isSentByCurrentUser) {

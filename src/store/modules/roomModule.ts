@@ -1,3 +1,4 @@
+
 import { xml } from '@xmpp/client';
 import { Room } from '../types';
 
@@ -63,10 +64,13 @@ export const createRoomModule = (set: any, get: any) => ({
       rooms: [...state.rooms, newRoom]
     }));
 
-    // Store room ownership persistently
+    // Store room ownership persistently with bare JID
     const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-    roomOwnership[roomJid] = currentUser;
+    const currentUserBareJid = currentUser.split('/')[0];
+    roomOwnership[roomJid] = currentUserBareJid;
     localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
+    
+    console.log(`Stored room ownership: ${roomJid} -> ${currentUserBareJid}`);
   },
 
   joinRoom: (roomJid: string) => {
@@ -144,6 +148,11 @@ export const createRoomModule = (set: any, get: any) => ({
 
     // Immediately remove from local state
     removeDeletedRoomFromList(roomJid);
+    
+    // Remove from ownership storage
+    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+    delete roomOwnership[roomJid];
+    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
     
     // Refresh room list after a short delay to ensure server sync
     setTimeout(() => {
@@ -258,18 +267,31 @@ export const createRoomModule = (set: any, get: any) => ({
     client.send(affiliationIq);
   },
 
-  // Add method to restore room ownership from localStorage
+  // Improved method to restore room ownership from localStorage
   restoreRoomOwnership: () => {
     const { currentUser } = get();
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.warn('No current user for ownership restoration');
+      return;
+    }
 
     console.log('Restoring room ownership from localStorage...');
     const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
+    const currentUserBareJid = currentUser.split('/')[0]; // Remove resource
+    
+    console.log('Current user bare JID:', currentUserBareJid);
+    console.log('Stored room ownership:', roomOwnership);
     
     set((state: any) => ({
       rooms: state.rooms.map((room: Room) => {
-        const isOwner = roomOwnership[room.jid] === currentUser.split('/')[0]; // Compare bare JID
-        console.log(`Room ${room.name}: isOwner=${isOwner} (stored: ${roomOwnership[room.jid]}, current: ${currentUser.split('/')[0]})`);
+        const storedOwner = roomOwnership[room.jid];
+        const isOwner = storedOwner === currentUserBareJid;
+        
+        console.log(`Room ${room.name} (${room.jid}):`);
+        console.log(`  Stored owner: ${storedOwner}`);
+        console.log(`  Current user: ${currentUserBareJid}`);
+        console.log(`  Is owner: ${isOwner}`);
+        
         return {
           ...room,
           isOwner

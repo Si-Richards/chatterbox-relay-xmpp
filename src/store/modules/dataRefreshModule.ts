@@ -24,7 +24,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
 
     toast({
       title: "Refreshing Data",
-      description: "Loading contacts and messages...",
+      description: "Loading contacts, rooms, and messages...",
       duration: 3000
     });
 
@@ -32,28 +32,34 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       // Phase 1: Load contacts first
       await get().refreshContacts();
       
-      // Phase 2: Load messages after contacts are loaded (with full history)
-      await get().refreshMessages();
-      
-      // Phase 3: Load rooms and restore ownership
+      // Phase 2: Load rooms and restore ownership
       await get().refreshRooms();
       
-      // Phase 4: Restore room ownership and fetch affiliations
+      // Phase 3: Restore room ownership from localStorage
       get().restoreRoomOwnership();
+      
+      // Phase 4: Load room affiliations for all rooms
       await get().refreshAllRoomAffiliations();
+      
+      // Phase 5: Load direct messages
+      await get().refreshDirectMessages();
+      
+      // Phase 6: Load room messages for each room
+      await get().refreshAllRoomMessages();
       
       setRefreshState({ 
         isRefreshing: false, 
-        lastRefresh: new Date() 
+        lastRefresh: new Date(),
+        messagesLoaded: true
       });
 
       toast({
         title: "Data Refreshed",
-        description: "All contacts and messages have been updated",
+        description: "All data has been updated successfully",
         duration: 2000
       });
 
-      // Phase 5: Send presence probes to contacts in batches
+      // Phase 7: Send presence probes to contacts
       setTimeout(() => {
         get().sendPresenceProbes();
       }, 1000);
@@ -120,25 +126,102 @@ export const createDataRefreshModule = (set: any, get: any) => ({
     });
   },
 
-  refreshMessages: (): Promise<void> => {
+  refreshDirectMessages: (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const { client, setRefreshState } = get();
+      const { client } = get();
       if (!client) {
         reject(new Error('No client connection'));
         return;
       }
 
-      console.log('Refreshing messages with full history...');
-      const requestId = `mam-refresh-${Date.now()}`;
+      console.log('Refreshing direct messages...');
+      const requestId = `mam-direct-${Date.now()}`;
       let resolved = false;
 
-      // Request all messages from the past 30 days to ensure we get full history
+      // Request direct messages from the past 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const mamQuery = xml(
         'iq',
         { type: 'set', id: requestId },
+        xml('query', { xmlns: 'urn:xmpp:mam:2' },
+          xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+            xml('field', { var: 'FORM_TYPE' },
+              xml('value', {}, 'urn:xmpp:mam:2')
+            ),
+            xml('field', { var: 'start' },
+              xml('value', {}, thirtyDaysAgo.toISOString())
+            ),
+            xml('field', { var: 'with' },
+              xml('value', {}, '') // Empty for direct messages only
+            )
+          )
+        )
+      );
+      
+      client.send(mamQuery);
+      
+      // Give MAM time to send all direct messages
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.log('Direct messages refresh completed');
+          resolve();
+        }
+      }, 4000);
+    });
+  },
+
+  refreshAllRoomMessages: async () => {
+    const { rooms } = get();
+    
+    console.log('Refreshing messages for all rooms...');
+    
+    // Process rooms in batches to avoid overwhelming the server
+    const batchSize = 3;
+    for (let i = 0; i < rooms.length; i += batchSize) {
+      const batch = rooms.slice(i, i + batchSize);
+      
+      const promises = batch.map(async (room: any) => {
+        try {
+          console.log(`Fetching messages for room: ${room.jid}`);
+          await get().refreshRoomMessages(room.jid);
+        } catch (error) {
+          console.error(`Failed to fetch messages for room ${room.jid}:`, error);
+        }
+      });
+      
+      await Promise.allSettled(promises);
+      
+      // Small delay between batches
+      if (i + batchSize < rooms.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    console.log('Finished refreshing all room messages');
+  },
+
+  refreshRoomMessages: (roomJid: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const { client } = get();
+      if (!client) {
+        reject(new Error('No client connection'));
+        return;
+      }
+
+      console.log(`Refreshing messages for room: ${roomJid}`);
+      const requestId = `mam-room-${Date.now()}`;
+      let resolved = false;
+
+      // Request room messages from the past 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const mamQuery = xml(
+        'iq',
+        { type: 'set', to: roomJid, id: requestId },
         xml('query', { xmlns: 'urn:xmpp:mam:2' },
           xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
             xml('field', { var: 'FORM_TYPE' },
@@ -153,15 +236,14 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       client.send(mamQuery);
       
-      // Give MAM more time to send all messages
+      // Give MAM time to send room messages
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          console.log('Messages refresh completed (full history)');
-          setRefreshState({ messagesLoaded: true });
+          console.log(`Room messages refresh completed for: ${roomJid}`);
           resolve();
         }
-      }, 5000);
+      }, 3000);
     });
   },
 
@@ -221,17 +303,28 @@ export const createDataRefreshModule = (set: any, get: any) => ({
     
     console.log('Refreshing affiliations for all rooms...');
     
-    // Fetch affiliations for all rooms in parallel
-    const affiliationPromises = rooms.map(async (room: any) => {
-      try {
-        console.log(`Fetching affiliations for room: ${room.jid}`);
-        await fetchRoomAffiliations(room.jid);
-      } catch (error) {
-        console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
+    // Fetch affiliations for all rooms in smaller batches
+    const batchSize = 2;
+    for (let i = 0; i < rooms.length; i += batchSize) {
+      const batch = rooms.slice(i, i + batchSize);
+      
+      const affiliationPromises = batch.map(async (room: any) => {
+        try {
+          console.log(`Fetching affiliations for room: ${room.jid}`);
+          await fetchRoomAffiliations(room.jid);
+        } catch (error) {
+          console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
+        }
+      });
+      
+      await Promise.allSettled(affiliationPromises);
+      
+      // Delay between batches
+      if (i + batchSize < rooms.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    });
+    }
     
-    await Promise.allSettled(affiliationPromises);
     console.log('Finished refreshing all room affiliations');
   },
 

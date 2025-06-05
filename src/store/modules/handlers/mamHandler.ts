@@ -29,41 +29,44 @@ export const handleMAMMessage = (stanza: any, set: any, get: any) => {
   // Check if MAM message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(originalMessage);
   
-  // Improved message ownership detection
+  // Improved message ownership detection with exact matching
   let isSentByCurrentUser = false;
   let chatJid = '';
   
-  const currentUserJid = currentUser.split('/')[0];
-  const currentUserNick = currentUser.split('@')[0];
+  const currentUserBareJid = currentUser.split('/')[0]; // Remove resource
+  const currentUserNickname = currentUser.split('@')[0]; // Username part only
   
   if (mamType === 'groupchat') {
-    // For group chats, check if the nickname part matches current user
-    const fromNick = mamFrom.split('/')[1];
+    // For group chats - extract room and nickname
     const roomJid = mamFrom.split('/')[0];
+    const fromNickname = mamFrom.split('/')[1];
     
-    // More robust ownership detection for group chats
-    isSentByCurrentUser = fromNick === currentUserNick || 
-                         mamFrom === `${roomJid}/${currentUserNick}` ||
-                         mamFrom.includes(`/${currentUserNick}`);
+    // Exact nickname matching for group messages
+    isSentByCurrentUser = fromNickname === currentUserNickname;
     chatJid = roomJid;
+    
+    console.log('MAM Groupchat Ownership Check:', {
+      fromNickname,
+      currentUserNickname,
+      mamFrom,
+      isSentByCurrentUser
+    });
   } else {
-    // For direct chats, check if from matches current user JID (more precise)
-    const fromJid = mamFrom.split('/')[0];
-    isSentByCurrentUser = fromJid === currentUserJid || mamFrom === currentUser;
-    chatJid = isSentByCurrentUser ? mamTo.split('/')[0] : fromJid;
+    // For direct chats - exact JID matching
+    const fromBareJid = mamFrom.split('/')[0];
+    const toBareJid = mamTo.split('/')[0];
+    
+    isSentByCurrentUser = fromBareJid === currentUserBareJid;
+    chatJid = isSentByCurrentUser ? toBareJid : fromBareJid;
+    
+    console.log('MAM Direct Chat Ownership Check:', {
+      fromBareJid,
+      currentUserBareJid,
+      mamFrom,
+      mamTo,
+      isSentByCurrentUser
+    });
   }
-  
-  // Debug logging with more details
-  console.log('MAM Message Ownership Detection:', {
-    mamFrom,
-    mamTo,
-    currentUser,
-    currentUserJid,
-    currentUserNick,
-    mamType,
-    isSentByCurrentUser,
-    chatJid
-  });
   
   // Get read status from persisted storage (only for received messages)
   const state = get();
