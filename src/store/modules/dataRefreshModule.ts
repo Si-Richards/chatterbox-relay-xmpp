@@ -34,16 +34,13 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       // Phase 2: Load rooms
       await get().refreshRooms();
       
-      // Phase 3: Restore room ownership from localStorage FIRST
-      get().restoreRoomOwnership();
+      // Phase 3: Verify room ownership using server affiliations (NEW APPROACH)
+      await get().verifyAllRoomOwnership();
       
-      // Phase 4: Load room affiliations for all rooms to verify/update ownership
-      await get().refreshAllRoomAffiliations();
-      
-      // Phase 5: Load direct messages
+      // Phase 4: Load direct messages
       await get().refreshDirectMessages();
       
-      // Phase 6: Load room messages for each room
+      // Phase 5: Load room messages for each room
       await get().refreshAllRoomMessages();
       
       setRefreshState({ 
@@ -58,7 +55,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         duration: 2000
       });
 
-      // Phase 7: Send presence probes to contacts
+      // Phase 6: Send presence probes to contacts
       setTimeout(() => {
         get().sendPresenceProbes();
       }, 1000);
@@ -295,36 +292,6 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         }
       }, 8000);
     });
-  },
-
-  refreshAllRoomAffiliations: async () => {
-    const { rooms, fetchRoomAffiliations } = get();
-    
-    console.log('Refreshing affiliations for all rooms to verify ownership...');
-    
-    // Fetch affiliations for all rooms, with focus on ownership verification
-    const batchSize = 2;
-    for (let i = 0; i < rooms.length; i += batchSize) {
-      const batch = rooms.slice(i, i + batchSize);
-      
-      const affiliationPromises = batch.map(async (room: any) => {
-        try {
-          console.log(`Fetching affiliations for room: ${room.jid} (current isOwner: ${room.isOwner})`);
-          await fetchRoomAffiliations(room.jid);
-        } catch (error) {
-          console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
-        }
-      });
-      
-      await Promise.allSettled(affiliationPromises);
-      
-      // Delay between batches
-      if (i + batchSize < rooms.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-    
-    console.log('Finished refreshing all room affiliations');
   },
 
   sendPresenceProbes: () => {

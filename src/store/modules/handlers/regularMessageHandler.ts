@@ -1,5 +1,6 @@
 
 import { Message } from '../../types';
+import { detectMessageOwnership } from './messageOwnership';
 
 export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   const from = stanza.attrs.from;
@@ -14,44 +15,8 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
   // Check if message is OMEMO encrypted
   const omemoInfo = handleOMEMOMessage(stanza);
   
-  // Improved message ownership detection with exact matching
-  let isSentByCurrentUser = false;
-  let chatJid = '';
-  
-  const currentUserBareJid = currentUser.split('/')[0]; // Remove resource
-  const currentUserNickname = currentUser.split('@')[0]; // Username part only
-  
-  if (type === 'groupchat') {
-    // For group chats - extract room and nickname
-    const roomJid = from.split('/')[0];
-    const fromNickname = from.split('/')[1];
-    
-    // Exact nickname matching for group messages
-    isSentByCurrentUser = fromNickname === currentUserNickname;
-    chatJid = roomJid;
-    
-    console.log('Regular Groupchat Ownership Check:', {
-      fromNickname,
-      currentUserNickname,
-      from,
-      isSentByCurrentUser
-    });
-  } else {
-    // For direct chats - exact JID matching
-    const fromBareJid = from.split('/')[0];
-    const toBareJid = to.split('/')[0];
-    
-    isSentByCurrentUser = fromBareJid === currentUserBareJid;
-    chatJid = isSentByCurrentUser ? toBareJid : fromBareJid;
-    
-    console.log('Regular Direct Chat Ownership Check:', {
-      fromBareJid,
-      currentUserBareJid,
-      from,
-      to,
-      isSentByCurrentUser
-    });
-  }
+  // Use improved ownership detection
+  const { isSentByCurrentUser, chatJid } = detectMessageOwnership(from, to, currentUser, type as 'chat' | 'groupchat');
 
   // Don't process messages we sent ourselves (they're already in state from sendMessage)
   if (isSentByCurrentUser) {
@@ -71,15 +36,26 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
     encryptionType: omemoInfo.isEncrypted ? 'omemo' : undefined
   };
 
-  // Check for file attachment
+  // Enhanced file attachment detection with better media type handling
   const fileElement = stanza.getChild('file', 'urn:xmpp:file-transfer');
   if (fileElement) {
+    const fileName = fileElement.attrs.name || 'Unknown file';
+    const fileType = fileElement.attrs.type || 'application/octet-stream';
+    const fileUrl = fileElement.attrs.url || '';
+    
     message.fileData = {
-      name: fileElement.attrs.name || 'Unknown file',
-      type: fileElement.attrs.type || 'application/octet-stream',
+      name: fileName,
+      type: fileType,
       size: parseInt(fileElement.attrs.size || '0'),
-      url: fileElement.attrs.url || ''
+      url: fileUrl
     };
+    
+    console.log('File attachment detected:', {
+      name: fileName,
+      type: fileType,
+      url: fileUrl,
+      isGif: fileType.includes('gif') || fileName.toLowerCase().endsWith('.gif')
+    });
   }
 
   // Check for poll data
@@ -110,6 +86,7 @@ export const handleRegularMessage = (stanza: any, set: any, get: any) => {
     const messageExists = existingMessages.some((msg: Message) => msg.id === message.id);
     
     if (!messageExists) {
+      console.log(`Added regular message: ${chatJid} - received - ${body.substring(0, 50)}`);
       return {
         messages: {
           ...state.messages,
