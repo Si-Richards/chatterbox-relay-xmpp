@@ -43,6 +43,9 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       // Phase 5: Load room messages for each room
       await get().refreshAllRoomMessages();
       
+      // Phase 6: Refresh all room affiliations
+      await get().refreshAllRoomAffiliations();
+      
       setRefreshState({ 
         isRefreshing: false, 
         lastRefresh: new Date(),
@@ -55,7 +58,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         duration: 2000
       });
 
-      // Phase 6: Send presence probes to contacts
+      // Phase 7: Send presence probes to contacts
       setTimeout(() => {
         get().sendPresenceProbes();
       }, 1000);
@@ -71,6 +74,40 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         duration: 4000
       });
     }
+  },
+
+  refreshAllRoomAffiliations: async () => {
+    const { rooms, fetchRoomAffiliations } = get();
+    if (!rooms.length) {
+      console.log('No rooms to refresh affiliations for');
+      return;
+    }
+
+    console.log(`Refreshing affiliations for ${rooms.length} rooms...`);
+    
+    // Process rooms in batches to avoid overwhelming the server
+    const batchSize = 3;
+    for (let i = 0; i < rooms.length; i += batchSize) {
+      const batch = rooms.slice(i, i + batchSize);
+      
+      const promises = batch.map(async (room: any) => {
+        try {
+          console.log(`Fetching affiliations for room: ${room.jid}`);
+          await fetchRoomAffiliations(room.jid);
+        } catch (error) {
+          console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
+        }
+      });
+      
+      await Promise.allSettled(promises);
+      
+      // Small delay between batches
+      if (i + batchSize < rooms.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    console.log('Finished refreshing all room affiliations');
   },
 
   refreshContacts: (): Promise<void> => {
