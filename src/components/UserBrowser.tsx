@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { UserPlus, Search, User, RefreshCw } from 'lucide-react';
+import { UserPlus, Search, User, RefreshCw, AlertCircle } from 'lucide-react';
 import { useXMPPStore } from '@/store/xmppStore';
 import { toast } from '@/hooks/use-toast';
 
@@ -15,11 +15,12 @@ interface ServerUser {
 }
 
 export const UserBrowser = () => {
-  const { client, contacts, addContact, fetchServerUsers, searchUserByJid } = useXMPPStore();
+  const { client, contacts, addContact, fetchServerUsers, searchUserByJid, isConnected } = useXMPPStore();
   const [serverUsers, setServerUsers] = useState<ServerUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   // Filter users based on search and exclude existing contacts
   const filteredUsers = serverUsers.filter(user => {
@@ -30,24 +31,33 @@ export const UserBrowser = () => {
   });
 
   const handleFetchUsers = async () => {
-    if (!client) {
+    if (!client || !isConnected) {
+      const error = "Not connected to server";
+      setLastError(error);
       toast({
-        title: "Error",
-        description: "Not connected to server",
+        title: "Connection Error",
+        description: error,
         variant: "destructive"
       });
       return;
     }
 
     setIsLoading(true);
+    setLastError(null);
+    
     try {
+      console.log('UserBrowser: Starting user fetch...');
       const users = await fetchServerUsers();
+      console.log(`UserBrowser: Fetched ${users.length} users`);
+      
       setServerUsers(users);
       
       if (users.length === 0) {
+        const message = "No users found on the server. The server might not support user discovery, or you might need different permissions.";
+        setLastError(message);
         toast({
           title: "No Users Found",
-          description: "No users were found on the server. Try searching for specific users by JID."
+          description: message
         });
       } else {
         toast({
@@ -56,9 +66,12 @@ export const UserBrowser = () => {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('UserBrowser: Failed to fetch users:', error);
+      setLastError(errorMessage);
       toast({
         title: "Error",
-        description: "Failed to fetch users from server",
+        description: `Failed to fetch users: ${errorMessage}`,
         variant: "destructive"
       });
     } finally {
@@ -67,12 +80,33 @@ export const UserBrowser = () => {
   };
 
   const handleSearchUser = async () => {
-    if (!searchQuery.trim() || !client) return;
+    if (!searchQuery.trim()) {
+      toast({
+        title: "Invalid Input", 
+        description: "Please enter a username or JID to search",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!client || !isConnected) {
+      toast({
+        title: "Connection Error",
+        description: "Not connected to server",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsSearching(true);
+    setLastError(null);
+    
     try {
+      console.log(`UserBrowser: Searching for user: ${searchQuery}`);
       const user = await searchUserByJid(searchQuery.trim());
+      
       if (user) {
+        console.log(`UserBrowser: Found user:`, user);
         // Add to server users list if not already there
         setServerUsers(prev => {
           const exists = prev.find(u => u.jid === user.jid);
@@ -87,16 +121,21 @@ export const UserBrowser = () => {
           description: `Found user: ${user.name}`
         });
       } else {
+        const message = `No user found with JID: ${searchQuery}. The user might not exist or might be offline.`;
+        setLastError(message);
         toast({
           title: "User Not Found",
-          description: `No user found with JID: ${searchQuery}`,
+          description: message,
           variant: "destructive"
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('UserBrowser: Search failed:', error);
+      setLastError(errorMessage);
       toast({
         title: "Search Error",
-        description: "Failed to search for user",
+        description: `Failed to search for user: ${errorMessage}`,
         variant: "destructive"
       });
     } finally {
@@ -105,6 +144,7 @@ export const UserBrowser = () => {
   };
 
   const handleAddUser = (userJid: string) => {
+    console.log(`UserBrowser: Adding user: ${userJid}`);
     addContact(userJid);
     toast({
       title: "Contact Added",
@@ -114,10 +154,11 @@ export const UserBrowser = () => {
 
   // Auto-fetch users when component mounts
   useEffect(() => {
-    if (client && serverUsers.length === 0) {
+    if (client && isConnected && serverUsers.length === 0) {
+      console.log('UserBrowser: Auto-fetching users on mount');
       handleFetchUsers();
     }
-  }, [client]);
+  }, [client, isConnected]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -127,6 +168,14 @@ export const UserBrowser = () => {
 
   return (
     <div className="space-y-4">
+      {/* Connection Status */}
+      {!isConnected && (
+        <div className="flex items-center space-x-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <span className="text-sm text-yellow-800">Not connected to server</span>
+        </div>
+      )}
+
       <div className="space-y-2">
         <div className="flex items-center space-x-2">
           <Input
@@ -136,24 +185,46 @@ export const UserBrowser = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyPress={handleKeyPress}
             className="flex-1"
+            disabled={!isConnected}
           />
-          <Button onClick={handleSearchUser} disabled={isSearching || !searchQuery.trim()}>
+          <Button 
+            onClick={handleSearchUser} 
+            disabled={isSearching || !searchQuery.trim() || !isConnected}
+          >
             <Search className="h-4 w-4 mr-2" />
             {isSearching ? 'Searching...' : 'Search'}
           </Button>
         </div>
         
-        <Button onClick={handleFetchUsers} disabled={isLoading} variant="outline" className="w-full">
+        <Button 
+          onClick={handleFetchUsers} 
+          disabled={isLoading || !isConnected} 
+          variant="outline" 
+          className="w-full"
+        >
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
           {isLoading ? 'Loading...' : 'Refresh Server Users'}
         </Button>
+
+        {/* Error Display */}
+        {lastError && (
+          <div className="p-2 bg-red-50 border border-red-200 rounded">
+            <p className="text-sm text-red-800">{lastError}</p>
+          </div>
+        )}
       </div>
 
       <ScrollArea className="h-96">
         <div className="space-y-2">
           {filteredUsers.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              {serverUsers.length === 0 ? (
+              {!isConnected ? (
+                <>
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p className="mb-2">Not connected to server</p>
+                  <p className="text-sm">Please ensure you're connected to browse users</p>
+                </>
+              ) : serverUsers.length === 0 ? (
                 <>
                   <User className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <p className="mb-2">No users found on server</p>
@@ -201,6 +272,14 @@ export const UserBrowser = () => {
           )}
         </div>
       </ScrollArea>
+
+      {/* Debug Info */}
+      <div className="text-xs text-gray-400 space-y-1">
+        <p>Connected: {isConnected ? 'Yes' : 'No'}</p>
+        <p>Total users found: {serverUsers.length}</p>
+        <p>Contacts: {contacts.length}</p>
+        <p>Filtered users: {filteredUsers.length}</p>
+      </div>
     </div>
   );
 };

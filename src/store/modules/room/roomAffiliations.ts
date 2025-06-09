@@ -1,6 +1,6 @@
 
 import { xml } from '@xmpp/client';
-import { Room } from '../../types';
+import { Room, RoomAffiliation } from '../../types';
 
 export const createRoomAffiliationsModule = (set: any, get: any) => ({
   fetchRoomAffiliations: async (roomJid: string): Promise<void> => {
@@ -23,81 +23,93 @@ export const createRoomAffiliationsModule = (set: any, get: any) => ({
           if (stanza.attrs.type === 'result') {
             console.log(`Successfully fetched affiliations for room: ${roomJid}`);
             
-            // Process the affiliations response and check for ownership
             const query = stanza.getChild('query', 'http://jabber.org/protocol/muc#admin');
             if (query) {
               const items = query.getChildren('item');
+              const affiliations: RoomAffiliation[] = [];
               const currentUserBareJid = currentUser.split('/')[0];
               let foundOwnership = false;
               
               items.forEach((item: any) => {
-                if (item.attrs.affiliation === 'owner') {
-                  const ownerJid = item.attrs.jid;
-                  const ownerBareJid = ownerJid?.split('/')[0];
+                const jid = item.attrs.jid;
+                const affiliation = item.attrs.affiliation;
+                const role = item.attrs.role || 'none';
+                
+                if (jid && affiliation) {
+                  const name = jid.split('@')[0];
                   
-                  if (ownerBareJid === currentUserBareJid) {
-                    foundOwnership = true;
-                    console.log(`Found ownership for current user in room ${roomJid}`);
-                    
-                    // Store ownership in localStorage
-                    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-                    roomOwnership[roomJid] = currentUserBareJid;
-                    localStorage.setItem('roomOwnership', JSON.stringify(roomOwnership));
-                    
-                    // Update room state
-                    set((state: any) => ({
-                      rooms: state.rooms.map((room: Room) =>
-                        room.jid === roomJid ? { ...room, isOwner: true } : room
-                      )
-                    }));
+                  affiliations.push({
+                    jid: jid,
+                    name: name,
+                    affiliation: affiliation as 'owner' | 'admin' | 'member' | 'none',
+                    role: role as 'moderator' | 'participant' | 'visitor' | 'none'
+                  });
+                  
+                  // Check for current user ownership
+                  if (affiliation === 'owner') {
+                    const ownerBareJid = jid.split('/')[0];
+                    if (ownerBareJid === currentUserBareJid) {
+                      foundOwnership = true;
+                      console.log(`Found ownership for current user in room ${roomJid}`);
+                    }
                   }
                 }
               });
               
-              if (!foundOwnership) {
-                console.log(`No ownership found for current user in room ${roomJid}`);
-              }
+              console.log(`Found ${affiliations.length} affiliations for room ${roomJid}`);
+              
+              // Update room state with affiliations and ownership
+              set((state: any) => ({
+                rooms: state.rooms.map((room: Room) =>
+                  room.jid === roomJid ? { 
+                    ...room, 
+                    affiliations,
+                    isOwner: foundOwnership 
+                  } : room
+                )
+              }));
             }
             
             resolve();
           } else if (stanza.attrs.type === 'error') {
             console.error(`Failed to fetch affiliations for room ${roomJid}:`, stanza);
-            reject(new Error(`Affiliation query failed for ${roomJid}`));
+            resolve(); // Don't reject, just resolve to continue
           }
         }
       };
 
       client.on('stanza', handleResponse);
 
-      // Query for all affiliation types
+      // Query for all affiliation types to get complete member list
       const affiliationQuery = xml(
         'iq',
         { type: 'get', to: roomJid, id: requestId },
         xml('query', { xmlns: 'http://jabber.org/protocol/muc#admin' },
           xml('item', { affiliation: 'owner' }),
           xml('item', { affiliation: 'admin' }),
-          xml('item', { affiliation: 'member' }),
-          xml('item', { affiliation: 'none' })
+          xml('item', { affiliation: 'member' })
         )
       );
 
       client.send(affiliationQuery);
 
-      // Timeout after 10 seconds
+      // Timeout after 8 seconds
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
           client.off('stanza', handleResponse);
           console.warn(`Affiliation query timeout for room: ${roomJid}`);
-          resolve(); // Don't fail on timeout, just resolve
+          resolve(); // Don't fail on timeout
         }
-      }, 10000);
+      }, 8000);
     });
   },
 
   setRoomAffiliation: (roomJid: string, userJid: string, affiliation: string, role: string) => {
     const { client } = get();
     if (!client) return;
+
+    console.log(`Setting affiliation for ${userJid} in room ${roomJid}: ${affiliation}/${role}`);
 
     const affiliationIq = xml(
       'iq',
@@ -110,34 +122,29 @@ export const createRoomAffiliationsModule = (set: any, get: any) => ({
     client.send(affiliationIq);
   },
 
-  // Enhanced method to restore room ownership from localStorage
+  // Enhanced method to restore room ownership from affiliations
   restoreRoomOwnership: () => {
-    const { currentUser } = get();
-    if (!currentUser) {
-      console.warn('No current user for ownership restoration');
+    const { currentUser, rooms } = get();
+    if (!currentUser || !rooms.length) {
+      console.warn('No current user or rooms for ownership restoration');
       return;
     }
 
-    console.log('Restoring room ownership from localStorage...');
-    const roomOwnership = JSON.parse(localStorage.getItem('roomOwnership') || '{}');
-    const currentUserBareJid = currentUser.split('/')[0]; // Remove resource
-    
-    console.log('Current user bare JID:', currentUserBareJid);
-    console.log('Stored room ownership:', roomOwnership);
+    console.log('Restoring room ownership from affiliations...');
+    const currentUserBareJid = currentUser.split('/')[0];
     
     set((state: any) => ({
       rooms: state.rooms.map((room: Room) => {
-        const storedOwner = roomOwnership[room.jid];
-        const isOwner = storedOwner === currentUserBareJid;
+        // Check if current user has owner affiliation
+        const hasOwnerAffiliation = room.affiliations?.some(aff => 
+          aff.jid.split('/')[0] === currentUserBareJid && aff.affiliation === 'owner'
+        );
         
-        console.log(`Room ${room.name} (${room.jid}):`);
-        console.log(`  Stored owner: ${storedOwner}`);
-        console.log(`  Current user: ${currentUserBareJid}`);
-        console.log(`  Is owner: ${isOwner}`);
+        console.log(`Room ${room.name}: hasOwnerAffiliation=${hasOwnerAffiliation}`);
         
         return {
           ...room,
-          isOwner
+          isOwner: hasOwnerAffiliation || false
         };
       })
     }));
