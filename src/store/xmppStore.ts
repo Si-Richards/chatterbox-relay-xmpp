@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { XMPPState, Message, Contact } from './types';
@@ -17,6 +16,7 @@ import { createServerUsersModule } from './modules/serverUsersModule';
 import { createContactManagementModule } from './modules/contactManagementModule';
 import { createRoomManagementModule } from './modules/roomManagementModule';
 import { createDataRefreshModule } from './modules/dataRefreshModule';
+import { createMessageProcessingModule } from './modules/messageProcessingModule';
 
 export * from './types';
 
@@ -69,6 +69,7 @@ export const useXMPPStore = create<XMPPState>()(
       ...createConnectionHealthModule(set, get),
       ...createRoomRefreshModule(set, get),
       ...createDataRefreshModule(set, get),
+      ...createMessageProcessingModule(set, get),
       ...createMessageModule(set, get),
       ...createPresenceModule(set, get),
       ...createRoomModule(set, get),
@@ -88,13 +89,11 @@ export const useXMPPStore = create<XMPPState>()(
         set((state: any) => {
           const chatMessages = state.messages[chatJid] || [];
           const updatedMessages = chatMessages.map((msg: Message) => {
-            // Only mark messages from others as read, and send read receipts
             if (msg.from !== currentUser && 
                 !msg.from.includes(currentUser.split('@')[0]) && 
                 msg.status !== 'read' && 
                 msg.id) {
               
-              // Send read receipt
               if (client && msg.type !== 'groupchat') {
                 const readReceipt = {
                   type: 'message',

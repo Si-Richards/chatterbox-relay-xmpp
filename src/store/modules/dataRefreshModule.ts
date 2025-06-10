@@ -10,10 +10,12 @@ export const createDataRefreshModule = (set: any, get: any) => ({
   },
 
   refreshAllData: async () => {
-    const { client, setRefreshState } = get();
+    const { client, setRefreshState, getConnectionQuality } = get();
     if (!client) return;
 
-    console.log('Starting complete data refresh...');
+    console.log('Starting adaptive data refresh...');
+    const connectionQuality = getConnectionQuality();
+    
     setRefreshState({ 
       isRefreshing: true, 
       contactsLoaded: false, 
@@ -23,28 +25,20 @@ export const createDataRefreshModule = (set: any, get: any) => ({
 
     toast({
       title: "Refreshing Data",
-      description: "Loading contacts, rooms, and messages...",
+      description: `Loading data (${connectionQuality} connection)...`,
       duration: 3000
     });
 
     try {
-      // Phase 1: Load contacts first
-      await get().refreshContacts();
+      // Phase 1: Critical data first
+      await get().refreshCriticalData();
       
-      // Phase 2: Load rooms
-      await get().refreshRooms();
-      
-      // Phase 3: Verify room ownership using server affiliations (NEW APPROACH)
-      await get().verifyAllRoomOwnership();
-      
-      // Phase 4: Load direct messages
-      await get().refreshDirectMessages();
-      
-      // Phase 5: Load room messages for each room
-      await get().refreshAllRoomMessages();
-      
-      // Phase 6: Refresh all room affiliations
-      await get().refreshAllRoomAffiliations();
+      // Phase 2: Adaptive loading based on connection quality
+      if (connectionQuality === 'excellent' || connectionQuality === 'good') {
+        await get().refreshAllDataFull();
+      } else {
+        await get().refreshDataLimited();
+      }
       
       setRefreshState({ 
         isRefreshing: false, 
@@ -57,11 +51,6 @@ export const createDataRefreshModule = (set: any, get: any) => ({
         description: "All data has been updated successfully",
         duration: 2000
       });
-
-      // Phase 7: Send presence probes to contacts
-      setTimeout(() => {
-        get().sendPresenceProbes();
-      }, 1000);
 
     } catch (error) {
       console.error('Data refresh failed:', error);
@@ -76,7 +65,108 @@ export const createDataRefreshModule = (set: any, get: any) => ({
     }
   },
 
+  refreshCriticalData: async () => {
+    console.log('Loading critical data...');
+    
+    // Load contacts first (needed for message attribution)
+    await get().refreshContacts();
+    
+    // Load rooms list
+    await get().refreshRooms();
+    
+    // Verify ownership for active room only
+    const { activeChat, activeChatType } = get();
+    if (activeChatType === 'room' && activeChat) {
+      await get().verifyRoomOwnership(activeChat);
+    }
+  },
+
+  refreshAllDataFull: async () => {
+    console.log('Loading full data set (good connection)...');
+    
+    // Load all room ownership
+    await get().verifyAllRoomOwnership();
+    
+    // Load recent messages
+    await get().refreshDirectMessages();
+    await get().refreshAllRoomMessages();
+    
+    // Load affiliations for owned rooms only
+    await get().refreshOwnedRoomAffiliations();
+    
+    // Send presence probes
+    setTimeout(() => {
+      get().sendPresenceProbes();
+    }, 1000);
+  },
+
+  refreshDataLimited: async () => {
+    console.log('Loading limited data set (poor connection)...');
+    
+    // Only load messages for active chat
+    const { activeChat, activeChatType } = get();
+    if (activeChat) {
+      if (activeChatType === 'room') {
+        await get().refreshRoomMessages(activeChat);
+        await get().fetchRoomAffiliations(activeChat);
+      } else {
+        await get().refreshDirectMessages();
+      }
+    }
+    
+    // Defer other operations
+    setTimeout(() => {
+      if (get().getConnectionQuality() !== 'unstable') {
+        get().refreshRemainingData();
+      }
+    }, 5000);
+  },
+
+  refreshRemainingData: async () => {
+    console.log('Loading remaining data...');
+    
+    try {
+      await get().verifyAllRoomOwnership();
+      await get().refreshOwnedRoomAffiliations();
+      get().sendPresenceProbes();
+    } catch (error) {
+      console.error('Failed to load remaining data:', error);
+    }
+  },
+
+  refreshOwnedRoomAffiliations: async () => {
+    const { rooms, fetchRoomAffiliations } = get();
+    const ownedRooms = rooms.filter((room: any) => room.isOwner);
+    
+    if (!ownedRooms.length) {
+      console.log('No owned rooms to refresh affiliations for');
+      return;
+    }
+
+    console.log(`Refreshing affiliations for ${ownedRooms.length} owned rooms...`);
+    
+    for (const room of ownedRooms) {
+      try {
+        await fetchRoomAffiliations(room.jid);
+        // Small delay to avoid overwhelming server
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (error) {
+        console.error(`Failed to fetch affiliations for room ${room.jid}:`, error);
+      }
+    }
+    
+    console.log('Finished refreshing owned room affiliations');
+  },
+
   refreshAllRoomAffiliations: async () => {
+    const { getConnectionQuality } = get();
+    
+    // Only refresh all affiliations on good connections
+    if (getConnectionQuality() === 'poor' || getConnectionQuality() === 'unstable') {
+      console.log('Skipping full affiliation refresh due to poor connection');
+      return get().refreshOwnedRoomAffiliations();
+    }
+
     const { rooms, fetchRoomAffiliations } = get();
     if (!rooms.length) {
       console.log('No rooms to refresh affiliations for');
@@ -85,8 +175,8 @@ export const createDataRefreshModule = (set: any, get: any) => ({
 
     console.log(`Refreshing affiliations for ${rooms.length} rooms...`);
     
-    // Process rooms in batches to avoid overwhelming the server
-    const batchSize = 3;
+    // Process rooms in smaller batches for better performance
+    const batchSize = 2;
     for (let i = 0; i < rooms.length; i += batchSize) {
       const batch = rooms.slice(i, i + batchSize);
       
@@ -101,9 +191,9 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       await Promise.allSettled(promises);
       
-      // Small delay between batches
+      // Longer delay between batches
       if (i + batchSize < rooms.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
     }
     
@@ -148,7 +238,6 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       client.send(rosterIq);
 
-      // Timeout after 10 seconds
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
@@ -161,7 +250,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
 
   refreshDirectMessages: (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const { client } = get();
+      const { client, getConnectionQuality } = get();
       if (!client) {
         reject(new Error('No client connection'));
         return;
@@ -171,9 +260,13 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       const requestId = `mam-direct-${Date.now()}`;
       let resolved = false;
 
-      // Request direct messages from the past 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Adjust timeframe based on connection quality
+      const connectionQuality = getConnectionQuality();
+      const daysBack = connectionQuality === 'excellent' ? 30 : 
+                      connectionQuality === 'good' ? 14 : 7;
+      
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
 
       const mamQuery = xml(
         'iq',
@@ -184,10 +277,10 @@ export const createDataRefreshModule = (set: any, get: any) => ({
               xml('value', {}, 'urn:xmpp:mam:2')
             ),
             xml('field', { var: 'start' },
-              xml('value', {}, thirtyDaysAgo.toISOString())
+              xml('value', {}, startDate.toISOString())
             ),
             xml('field', { var: 'with' },
-              xml('value', {}, '') // Empty for direct messages only
+              xml('value', {}, '')
             )
           )
         )
@@ -195,26 +288,35 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       client.send(mamQuery);
       
-      // Give MAM time to send all direct messages
+      const timeout = connectionQuality === 'excellent' ? 4000 : 
+                     connectionQuality === 'good' ? 3000 : 2000;
+      
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
           console.log('Direct messages refresh completed');
           resolve();
         }
-      }, 4000);
+      }, timeout);
     });
   },
 
   refreshAllRoomMessages: async () => {
-    const { rooms } = get();
+    const { rooms, getConnectionQuality } = get();
+    const connectionQuality = getConnectionQuality();
     
     console.log('Refreshing messages for all rooms...');
     
-    // Process rooms in batches to avoid overwhelming the server
-    const batchSize = 3;
-    for (let i = 0; i < rooms.length; i += batchSize) {
-      const batch = rooms.slice(i, i + batchSize);
+    // Limit rooms based on connection quality
+    const maxRooms = connectionQuality === 'excellent' ? rooms.length :
+                     connectionQuality === 'good' ? Math.min(rooms.length, 10) : 
+                     Math.min(rooms.length, 5);
+    
+    const roomsToProcess = rooms.slice(0, maxRooms);
+    const batchSize = connectionQuality === 'excellent' ? 3 : 2;
+    
+    for (let i = 0; i < roomsToProcess.length; i += batchSize) {
+      const batch = roomsToProcess.slice(i, i + batchSize);
       
       const promises = batch.map(async (room: any) => {
         try {
@@ -227,18 +329,18 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       await Promise.allSettled(promises);
       
-      // Small delay between batches
-      if (i + batchSize < rooms.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (i + batchSize < roomsToProcess.length) {
+        const delay = connectionQuality === 'excellent' ? 300 : 600;
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
-    console.log('Finished refreshing all room messages');
+    console.log('Finished refreshing room messages');
   },
 
   refreshRoomMessages: (roomJid: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const { client } = get();
+      const { client, getConnectionQuality } = get();
       if (!client) {
         reject(new Error('No client connection'));
         return;
@@ -248,9 +350,12 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       const requestId = `mam-room-${Date.now()}`;
       let resolved = false;
 
-      // Request room messages from the past 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const connectionQuality = getConnectionQuality();
+      const daysBack = connectionQuality === 'excellent' ? 30 : 
+                      connectionQuality === 'good' ? 14 : 7;
+
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
 
       const mamQuery = xml(
         'iq',
@@ -261,7 +366,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
               xml('value', {}, 'urn:xmpp:mam:2')
             ),
             xml('field', { var: 'start' },
-              xml('value', {}, thirtyDaysAgo.toISOString())
+              xml('value', {}, startDate.toISOString())
             )
           )
         )
@@ -269,14 +374,16 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       client.send(mamQuery);
       
-      // Give MAM time to send room messages
+      const timeout = connectionQuality === 'excellent' ? 3000 : 
+                     connectionQuality === 'good' ? 2500 : 2000;
+      
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
           console.log(`Room messages refresh completed for: ${roomJid}`);
           resolve();
         }
-      }, 3000);
+      }, timeout);
     });
   },
 
@@ -304,7 +411,7 @@ export const createDataRefreshModule = (set: any, get: any) => ({
           } else {
             console.log('Room refresh completed (no rooms or error)');
             setRefreshState({ roomsLoaded: true });
-            resolve(); // Don't fail if no rooms exist
+            resolve();
           }
         }
       };
@@ -319,27 +426,29 @@ export const createDataRefreshModule = (set: any, get: any) => ({
       
       client.send(discoIq);
 
-      // Timeout after 8 seconds
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
           client.off('stanza', handleResponse);
           setRefreshState({ roomsLoaded: true });
-          resolve(); // Don't fail on timeout for rooms
+          resolve();
         }
       }, 8000);
     });
   },
 
   sendPresenceProbes: () => {
-    const { client, contacts } = get();
+    const { client, contacts, getConnectionQuality } = get();
     if (!client || !contacts.length) return;
 
+    const connectionQuality = getConnectionQuality();
     console.log(`Sending presence probes to ${contacts.length} contacts...`);
     
-    // Send presence probes in batches of 5 with 200ms delay between batches
-    const batchSize = 5;
-    const delay = 200;
+    // Adjust batch size and delay based on connection quality
+    const batchSize = connectionQuality === 'excellent' ? 10 : 
+                     connectionQuality === 'good' ? 5 : 3;
+    const delay = connectionQuality === 'excellent' ? 100 : 
+                 connectionQuality === 'good' ? 200 : 500;
     
     for (let i = 0; i < contacts.length; i += batchSize) {
       const batch = contacts.slice(i, i + batchSize);
@@ -371,7 +480,6 @@ export const createDataRefreshModule = (set: any, get: any) => ({
           throw lastError;
         }
         
-        // Exponential backoff
         const waitTime = delay * Math.pow(2, attempt - 1);
         console.log(`Waiting ${waitTime}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
